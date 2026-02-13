@@ -1,18 +1,18 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-import Completed from './Completed'
-import Leave_Form from './Leave_Form'
+import { useState } from "react";
+import reactLogo from "./assets/react.svg";
+import viteLogo from "/vite.svg";
+import "./App.css";
+import Completed from "./Completed";
+import Leave_Form from "./Leave_Form";
 
 function App() {
-  const [submitted, setSubmitted] = useState(false)
+  const [submitted, setSubmitted] = useState(false);
 
-  return <>
-  {
-    submitted ? <Completed /> : <Leave_Form/>
-  }
-  </>
+  return (
+    <>
+      {submitted ? <Completed /> : <Leave_Form setSubmitted={setSubmitted} />}
+    </>
+  );
 }
 
-export default App
+export default App;

@@ -2,35 +2,29 @@ import { useFormik } from "formik";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Calendar1,
-  CalendarCheck,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { useState } from "react";
 import * as Yup from "yup";
-import { toast } from "sonner"; // Ensure you have this installed, or remove toast calls
+import { toast } from "sonner";
+import Completed from "./Completed";
+import { set } from "date-fns";
 
-export default function Leave_Form() {
+export default function Leave_Form({ setSubmitted }) {
   const officeOptions = [
     "Office of the Administrator",
     "Office of the Deputy Administrator",
@@ -89,6 +83,7 @@ export default function Leave_Form() {
     "Adoption Leave (R.A. No. 8552)",
     "Others",
   ];
+
   const allowedDomain = [
     "gmail.com",
     "yahoo.com",
@@ -97,7 +92,8 @@ export default function Leave_Form() {
   ];
 
   const [stage, setStage] = useState(0);
-  const [submitted, setSubmitted] = useState(false); // FIXED: Added missing state
+  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleNext = async (formik) => {
     const errors = await formik.validateForm();
@@ -124,7 +120,6 @@ export default function Leave_Form() {
     const hasErrors = currentFields.some((field) => errors[field]);
     if (!hasErrors) {
       formik.setTouched({});
-      // formik.setErrors({}); // Usually not needed to manually clear errors if validateForm returned none for these fields
       setStage((prev) => prev + 1);
     } else {
       const touchedFields = {};
@@ -132,11 +127,9 @@ export default function Leave_Form() {
         touchedFields[field] = true;
       });
       formik.setTouched(touchedFields);
-      console.log("Validation errors:", errors);
     }
   };
 
-  //Section validation for each stage of the form
   const validationSchema = [
     // STAGE 0
     Yup.object({
@@ -174,12 +167,17 @@ export default function Leave_Form() {
         ),
       salaryGrade: Yup.string()
         .required("Salary Grade is required")
-        .max(10, "Salary Grade must be at most 10 characters")
-        .min(2, "Salary Grade must be at least 2 characters")
+
         .matches(
           /^SG\d+$/,
           'Salary Grade must start with "SG" followed by numbers',
-        ),
+        )
+        .test("range", "Salary Grade must be between SG1 and SG33", (value) => {
+          if (!value) return true;
+
+          const numberPart = parseInt(value.replace("SG", ""), 10);
+          return numberPart >= 1 && numberPart <= 33;
+        }),
     }),
     // STAGE 1
     Yup.object({
@@ -203,45 +201,65 @@ export default function Leave_Form() {
         "vacationSpecialPrivilegeLeaveSpecifications",
         {
           is: "Abroad",
-          then: () =>
-            Yup.string().required(
-              "Required to specify the country to be visited",
-            ),
-          otherwise: () => Yup.string().notRequired(),
+          then: (schema) =>
+            schema
+              .required("Required to specify the country to be visited")
+              .trim() // Removes accidental spaces at start/end
+              .min(2, "Country name must be at least 2 characters")
+              .max(60, "Country name is too long")
+              // ALLOWS: Letters, Spaces, Dots (.), Hyphens (-), Apostrophes (')
+              .matches(
+                /^[a-zA-Z\s\-\.\']+$/,
+                "Country name cannot contain numbers or special symbols (@, #, !, etc.)",
+              ),
+          otherwise: (schema) => schema.notRequired(),
         },
       ),
       sickLeaveSpecification: Yup.string().when("typeOfLeave", {
         is: "Sick Leave (Sec. 43, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-        then: () =>
-          Yup.string().required(
+        then: (schema) =>
+          schema.required(
             "Required to specify if the employee is an In Hospital or Outpatient",
           ),
-        otherwise: () => Yup.string().notRequired(),
+        otherwise: (schema) => schema.notRequired(),
       }),
-      inHospitalSpecification: Yup.string().when(
-        "sickLeaveSpecification",
-        (value, schema) => {
-          return value === "In Hospital"
-            ? schema.required("Required to specify the details for In Hospital")
-            : schema.notRequired();
-        },
-      ),
-      outpatientSpecification: Yup.string().when(
-        "sickLeaveSpecification",
-        (value, schema) => {
-          return value === "Outpatient"
-            ? schema.required("Required to specify the details for Outpatient")
-            : schema.notRequired();
-        },
-      ),
+
+      inHospitalSpecification: Yup.string().when("sickLeaveSpecification", {
+        is: "In Hospital",
+        then: (schema) =>
+          schema
+            .required("Required to specify the details for In Hospital")
+            .matches(
+              /^[a-zA-Z\s\-\.\']+$/,
+              "Illness name cannot contain numbers or special symbols (@, #, !, etc.)",
+            ),
+        otherwise: (schema) => schema.notRequired(),
+      }),
+
+      outpatientSpecification: Yup.string().when("sickLeaveSpecification", {
+        is: "Outpatient",
+        then: (schema) =>
+          schema
+            .required("Required to specify the details for Outpatient")
+            .matches(
+              /^[a-zA-Z\s\-\.\']+$/,
+              "Illness name cannot contain numbers or special symbols (@, #, !, etc.)",
+            ),
+        otherwise: (schema) => schema.notRequired(),
+      }),
       specialLeaveBenefitsForWomenSpecification: Yup.string().when(
         "typeOfLeave",
         {
           is: "Special Leave Benefits for Women (RA No. 9710 / CSC MC No. 25, s. 2010)",
           then: () =>
-            Yup.string().required(
-              "Required to specify the details for Special Leave Benefits for Women",
-            ),
+            Yup.string()
+              .required(
+                "Required to specify the details for Special Leave Benefits for Women",
+              )
+              .matches(
+                /^[a-zA-Z\s\-\.\']+$/,
+                "Details cannot contain numbers or special symbols (@, #, !, etc.)",
+              ),
           otherwise: () => Yup.string().notRequired(),
         },
       ),
@@ -256,13 +274,19 @@ export default function Leave_Form() {
       otherSpecification: Yup.string().when("typeOfLeave", {
         is: "Others",
         then: () =>
-          Yup.string().required(
-            "Required to specify which type of leave the employee wants to avail",
-          ),
+          Yup.string()
+            .required(
+              "Required to specify which type of leave the employee wants to avail",
+            )
+            .matches(
+              /^[a-zA-Z\s\-\.\']+$/,
+              "Details cannot contain numbers or special symbols (@, #, !, etc.)",
+            ),
         otherwise: () => Yup.string().notRequired(),
       }),
     }),
-    // STAGE 2 (FIXED: Added this missing schema)
+
+    // STAGE 2
     Yup.object({
       startDate: Yup.string().required("Start date is required"),
       endDate: Yup.string().required("End date is required"),
@@ -290,10 +314,8 @@ export default function Leave_Form() {
       endDate: "",
     },
     validationSchema: validationSchema[stage],
-    onSubmit: async (values, { resetForm, setSubmitting }) => {
-      const submissionData = {
-        ...values,
-      };
+    onSubmit: async (values) => {
+      const submissionData = values;
 
       if (window.google && window.google.script) {
         const googleScriptPromise = new Promise((resolve, reject) => {
@@ -312,26 +334,35 @@ export default function Leave_Form() {
         });
 
         try {
+          setSubmitting(true);
+          setLoading(true);
           await toast.promise(googleScriptPromise, {
             loading: "Submitting request...",
-            success: "Request submitted successfully!",
+            success: () => {
+              setSubmitting(false);
+              setSubmitted(true);
+              return "Request submitted successfully!";
+            },
             error: (err) => `Submission failed: ${err}`,
           });
-
-          resetForm();
-          setSubmitted(true);
-          // If you want to move to a "Thank you" page or Stage 3:
-          setStage((prev) => prev + 1);
         } catch (error) {
           console.error("Submission error:", error);
         } finally {
-          setSubmitting(false);
+          setLoading(false);
         }
       } else {
         // Fallback for local testing
         console.log("Local Test Data:", submissionData);
-        alert("Google Script not found. Check console for data.");
-        setSubmitting(false);
+        setSubmitting(true);
+        toast.info("Submitting request... (Local Test)");
+
+        // Simulating a delay for local test
+        setTimeout(() => {
+          toast.info("Local test submitted. Check console.");
+          setSubmitted(true);
+          setLoading(false);
+          setSubmitting(false);
+        }, 10000);
       }
     },
   });
@@ -345,12 +376,10 @@ export default function Leave_Form() {
             <h1 className="md:text-4xl text-xl">Leave Form</h1>
           </div>
           <div>
-            {/* Display correct step count */}
             <p className="text-gray-500">{stage + 1} of 3</p>
           </div>
         </div>
 
-        {/* Important: handleSubmit is bound here */}
         <form onSubmit={formik.handleSubmit}>
           {/* --- STAGE 0 --- */}
           {stage === 0 ? (
@@ -1035,14 +1064,12 @@ export default function Leave_Form() {
                   <Popover>
                     <PopoverTrigger asChild>
                       <div
-                        // FIXED: Check startDate, not Issue_On
                         className={`border flex flex-row items-center justify-between text-black border-gray-300 rounded-md p-2 w-full ${formik.values.startDate ? "text-black" : "text-gray-500"}`}
                       >
                         {formik.values.startDate || formik.values.endDate
                           ? `${new Date(formik.values.startDate).toLocaleDateString()} - ${new Date(formik.values.endDate).toLocaleDateString()}`
                           : "Select a date"}
                         <Calendar1
-                          // FIXED: Check startDate, not Issue_On
                           className={`${formik.values.startDate ? "text-black" : "text-gray-500"}`}
                         />
                       </div>
@@ -1076,12 +1103,11 @@ export default function Leave_Form() {
                         }}
                         className="rounded-lg border"
                         captionLayout="dropdown"
-                        disabled={(date) => date < new Date()}
+                        //disabled={(date) => date < new Date()}
                       />
                     </PopoverContent>
                   </Popover>
 
-                  {/* FIXED: Display errors for startDate and endDate */}
                   {formik.touched.startDate && formik.errors.startDate ? (
                     <p className="text-sm text-red-600">
                       {formik.errors.startDate}
@@ -1097,9 +1123,10 @@ export default function Leave_Form() {
           ) : null}
 
           <div className="flex flex-row gap-5">
-            {stage > 0 && stage !== 3 ? (
+            {stage > 0 && (
               <button
                 type="button"
+                disabled={submitting || formik.isSubmitting}
                 onClick={() => {
                   setStage((prev) => prev - 1);
                 }}
@@ -1108,9 +1135,9 @@ export default function Leave_Form() {
                 <ChevronLeft className="mr-2" />
                 <p>Back</p>
               </button>
-            ) : null}
+            )}
 
-            {stage >= 0 && stage != 2 ? (
+            {stage < 2 ? (
               <button
                 type="button"
                 onClick={() => handleNext(formik)}
@@ -1120,12 +1147,12 @@ export default function Leave_Form() {
                 <ChevronRight className="ml-2" />
               </button>
             ) : (
-              // FIXED: Changed type="submit" and removed onClick={() => {}}
               <button
                 type="submit"
+                disabled={submitting}
                 className="w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer"
               >
-                <p>Submit</p>
+                <p>{submitting ? "Submitting..." : "Submit"}</p>
                 <ChevronRight className="ml-2" />
               </button>
             )}
