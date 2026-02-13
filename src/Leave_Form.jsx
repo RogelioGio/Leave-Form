@@ -316,6 +316,10 @@ export default function Leave_Form({ setSubmitted }) {
     validationSchema: validationSchema[stage],
     onSubmit: async (values) => {
       const submissionData = values;
+      submissionData.salaryGrade = values.salaryGrade.replace(
+        /^SG0+(\d+)/,
+        "SG$1",
+      );
 
       if (window.google && window.google.script) {
         const googleScriptPromise = new Promise((resolve, reject) => {
@@ -531,8 +535,11 @@ export default function Leave_Form({ setSubmitted }) {
                   placeholder="Your current salary grade"
                   onBlur={formik.handleBlur}
                   onChange={(e) => {
-                    const onlySG = e.target.value.replace(/[^0-9]/g, "");
-                    formik.setFieldValue("salaryGrade", "SG" + onlySG);
+                    const digits = e.target.value.replace(/[^0-9]/g, "");
+                    formik.setFieldValue(
+                      "salaryGrade",
+                      digits ? `SG${digits}` : "SG",
+                    );
                   }}
                   value={formik.values.salaryGrade}
                 />
