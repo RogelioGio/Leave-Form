@@ -91,7 +91,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(0);
+  const [stage, setStage] = useState(0)
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -112,7 +112,7 @@ export default function Leave_Form({ setSubmitted }) {
         "otherSpecification",
         "otherPurposeSpecification",
       ],
-      ["startDate", "endDate"],
+      ["dates"],
     ];
 
     const currentFields = stepFields[stage];
@@ -166,7 +166,7 @@ export default function Leave_Form({ setSubmitted }) {
           "Position can only contain letters, spaces, and commas",
         ),
       salaryGrade: Yup.string()
-        .required("Salary Grade is required")
+        .required("Salary Grade is required").max(4,"Salary Grade must be at most 4 characters")
 
         .matches(
           /^SG\d+$/,
@@ -286,11 +286,14 @@ export default function Leave_Form({ setSubmitted }) {
       }),
     }),
 
-    // STAGE 2
-    Yup.object({
-      startDate: Yup.string().required("Start date is required"),
-      endDate: Yup.string().required("End date is required"),
+
+Yup.object({
+      dates: Yup.array()
+        .min(1, "You must select at least one date")
+        .required("Date selection is required")
     }),
+  
+
   ];
 
     const formik = useFormik({
@@ -319,15 +322,69 @@ export default function Leave_Form({ setSubmitted }) {
             dates:[] // stagger dates from now on
         },
         validationSchema: validationSchema[stage],
-        onSubmit: (values) => {
-            console.log(values)
-            setStage(prev => prev + 1)
-        }
-    })
+    onSubmit: async (values) => {
+        const formattedDates = [...values.dates]
+    .sort((a, b) => a - b) // Sort chronologically
+    .map(date => format(date, "MM-dd"));
 
-    // useEffect(() => {
-    //     console.log(formik.values.dates)
-    // },[formik.values.dates])
+     const submissionData = {
+    ...values,
+    dates: formattedDates, // Sent as ["2026-02-28", "2026-04-01", ...]
+    totalDays: formattedDates.length
+  };
+
+      if (window.google && window.google.script) {
+        const googleScriptPromise = new Promise((resolve, reject) => {
+          window.google.script.run
+            .withSuccessHandler((response) => {
+              if (response && response.status === "success") {
+                resolve(response);
+              } else {
+                reject(response.message || "Unknown error from server");
+              }
+            })
+            .withFailureHandler((error) => {
+              reject(error.message || error);
+            })
+            .saveForm(submissionData);
+        });
+
+        try {
+          setSubmitting(true);
+          setLoading(true);
+          await toast.promise(googleScriptPromise, {
+            loading: "Submitting request...",
+            success: () => {
+              setSubmitting(false);
+              setSubmitted(true);
+              return "Request submitted successfully!";
+            },
+            error: (err) => `Submission failed: ${err}`,
+          });
+        } catch (error) {
+          console.error("Submission error:", error);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        // Fallback for local testing
+        console.log("Local Test Data:", submissionData);
+        setSubmitting(true);
+        toast.info("Submitting request... (Local Test)");
+
+        // Simulating a delay for local test
+        setTimeout(() => {
+          toast.info("Local test submitted. Check console.");
+          setSubmitted(true);
+          setLoading(false);
+          setSubmitting(false);
+        }, 1500);
+      }
+    },
+  });
+     useEffect(() => {
+         console.log(stage)
+     },[stage])
 
     return <>
         <div className='bg-white w-xl h-xl rounded-xl p-6 space-y-5'>
@@ -443,6 +500,7 @@ export default function Leave_Form({ setSubmitted }) {
                             id="salaryGrade"
                             name="salaryGrade"
                             type="text"
+                            maxLength={4}
                             placeholder='Your current salary grade'
                             onBlur={formik.handleBlur}
                             onChange={
@@ -781,7 +839,8 @@ export default function Leave_Form({ setSubmitted }) {
                                     defaultMonth={new Date()}
                                     selected={formik.values.dates ? formik.values.dates : []}
                                     onSelect={(date) => {
-                                        formik.setFieldValue("dates", date);    
+                                        formik.setFieldValue("dates",date || []);    
+                                        formik.setFieldTouched("dates", true, false);
                                     }}
                                     
                                     className="rounded-lg border"
@@ -790,8 +849,8 @@ export default function Leave_Form({ setSubmitted }) {
                             />
                             </PopoverContent>
                             </Popover>
-                            {formik.touched.Issue_On && formik.errors.Issue_On ? (
-                            <p className="text-sm text-red-600">{formik.errors.Issue_On}</p>
+                            {formik.touched.dates && formik.errors.dates ? (
+                            <p className="text-sm text-red-600">{formik.errors.dates}</p>
                         ) : null}
                         </div>
                         
@@ -799,21 +858,24 @@ export default function Leave_Form({ setSubmitted }) {
                     </>
                     : null  
                 }
+
+                 
                 <div className="flex flex-row gap-5">
                     {
-                        stage > 0 && stage !== 3 ?
+                        stage > 0  ?
                         <button type="button" onClick={()=>{setStage(prev => prev - 1)}} className='w-full flex flex-row justify-between mt-5 text-gray-700 font-text rounded-md hover:bg-gray-400 p-4 transition-all ease-in-out cursor-pointer border border-gray-300'>
                             <ChevronLeft className="mr-2"/>
                             <p>Back</p>
                         </button> : null
                     }
                     {
-                        stage >= 0 && stage != 2 ?
+                        stage < 2 ?
                         <button type="button" onClick={()=>handleNext(formik)} className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer'>
                             <p>Next</p>
                             <ChevronRight className="ml-2"/>
-                        </button> : <button type="button" onClick={()=>{}} className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer'>
-                            <p>Submit</p>
+                           
+                        </button> : <button type="submit" onClick={()=>{}} disabled= {submitting} className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer'>
+                            <p>{submitting ? "Submitting..." : "Submit Application"}</p>
                             <ChevronRight className="ml-2"/>
                         </button>
                     }
