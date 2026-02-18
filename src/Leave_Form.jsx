@@ -91,8 +91,8 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(0)
-  const [submitting, setSubmitting] = useState(false);
+  const [stage, setStage] = useState(1);
+   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleNext = async (formik) => {
@@ -242,7 +242,7 @@ export default function Leave_Form({ setSubmitted }) {
           schema
             .required("Required to specify the details for Outpatient")
             .matches(
-              /^[a-zA-Z\s\-\.\']+$/,
+              /^[a-zA-Z\s\-\.\'\,]+$/,
               "Illness name cannot contain numbers or special symbols (@, #, !, etc.)",
             ),
         otherwise: (schema) => schema.notRequired(),
@@ -674,6 +674,7 @@ Yup.object({
                                                 type="text"
                                                 placeholder='Enter specification'
                                                 onChange={formik.handleChange}
+                                                maxLength={50}
                                                 value={formik.values.inHospitalSpecification}
                                             />
                                             {formik.touched.inHospitalSpecification && formik.errors.inHospitalSpecification ? (
@@ -693,6 +694,7 @@ Yup.object({
                                                 type="text"
                                                 placeholder='Enter specification'
                                                 onChange={formik.handleChange}
+                                                maxLength={50}
                                                 value={formik.values.outpatientSpecification}
                                             />
                                             {formik.touched.outpatientSpecification && formik.errors.outpatientSpecification ? (
@@ -770,6 +772,7 @@ Yup.object({
                                         id="otherSpecification"
                                         name="otherSpecification"
                                         type="text"
+                                        maxLength={50}
                                         placeholder='Enter other specification'
                                         onChange={formik.handleChange}
                                         value={formik.values.otherSpecification}
