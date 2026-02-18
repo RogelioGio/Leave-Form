@@ -111,7 +111,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(0)
+  const [stage, setStage] = useState(2);
    const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -307,11 +307,24 @@ export default function Leave_Form({ setSubmitted }) {
     }),
 
 
-Yup.object({
-      dates: Yup.array()
-        .min(1, "You must select at least one date")
-        .required("Date selection is required")
-    }),
+    Yup.object({
+        dateTypes: Yup.string().required("Required to select duration of leave"),
+        startDate: Yup.date().when("dateTypes", {
+          is: "single",
+          then: (schema) => schema.required("Required to select date"),
+          otherwise: (schema) => schema.notRequired(),
+        }),
+        endDate: Yup.date().when("dateTypes", {
+          is: "range",
+          then: (schema) => schema.required("Required to select date"),
+          otherwise: (schema) => schema.notRequired(),
+        }),
+        dates: Yup.array().when("dateTypes", {
+          is: "multiple",
+          then: (schema) => schema.min(1, "You must select at least one date"),
+          otherwise: (schema) => schema.notRequired(),
+        }),
+    })
   
 
   ];
@@ -339,7 +352,11 @@ Yup.object({
             otherSpecification:"",
             otherPurposeSpecification:"",
             // Duration of Leave
+            dateTypes: "single", // default to single date selection eg: single range and stagger
+            startDate: null,
+            endDate: null,
             dates:[] // stagger dates from now on
+            
         },
         validationSchema: validationSchema[stage],
     onSubmit: async (values) => {
@@ -847,39 +864,169 @@ Yup.object({
                             <h1 className="text-lg font-medium text-gray-700">Duration of Leave</h1>
                             <p className="text-sm text-gray-500">  The total length of time an employee is away from work, typically defined by specific start and end dates.</p>
                         </div>
-                        <div className='relative items-center justify-center gap-2'>
-                            <Popover>
-                            <PopoverTrigger asChild>
-                                <div className={`border flex flex-row items-center justify-between text-black border-gray-300 rounded-md p-2 w-full ${formik.values.Issue_On ? "text-black" : "text-gray-500"}`}>
-                                    {formik.values.dates && formik.values.dates.length > 0 ? `${formik.values.dates.map(d => format(d, "MMM dd")).join(", ")}` : "Select a date"}
-                                    <Calendar1 className={`${formik.values.Issue_On ? "text-black" : "text-gray-500"}`}/>
+                        <div>
+                            <div>
+                                <label className='font-text block text-sm font-medium text-gray-700 text-left mb-2' htmlFor="dateTypes">How long the duration for your leave</label>
+                                <div className="flex flex-row gap-2">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild type="button">
+                                            <div className='border border-gray-200 p-2 rounded-md w-full text-left hover:bg-gray-100 cursor-pointer flex justify-between items-center'>
+                                            <span className={`${formik.values.dateTypes ? "text-black" : "text-gray-500"}`}>{formik.values.dateTypes === "single" ? "A Single Day" : formik.values.dateTypes === "range" ? "A Range of Days" : formik.values.dateTypes === "multiple" ? "Multiple Days" : "Select duration type"}</span>
+                                            <ChevronDown className={`${formik.values.dateTypes ? "text-black" : "text-gray-500"}`}/>
+                                            </div>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent>
+                                            <DropdownMenuRadioGroup value={formik.values.dateTypes} onValueChange={(value) => {
+                                                formik.setValues({
+                                                    ...formik.values,
+                                                    startDate: null,
+                                                    endDate: null,
+                                                    dates: [],
+                                                    dateTypes: value,})
+                                            }}> 
+                                                <DropdownMenuRadioItem value="single">A Single Day</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="range">A Range of Days</DropdownMenuRadioItem>
+                                                <DropdownMenuRadioItem value="multiple">A Multiple Days</DropdownMenuRadioItem>
+                                            </DropdownMenuRadioGroup>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
-                            </PopoverTrigger>
-                            <PopoverContent className={"p-0 w-fit"}>
-                                <Calendar
-                                    mode="multiple"
-                                    numberOfMonths={2}
-                                    defaultMonth={new Date()}
-                                    disabled={(currentDate) => {
-                                        const day = currentDate.getDay()
-                                        if (day === 0 || day === 6) return true
-                                        return hd.some((holiday) => isSameDay(parseISO(holiday.date), currentDate))
-                                    }}
-                                    selected={formik.values.dates ? formik.values.dates : []}
-                                    onSelect={(date) => {
-                                        formik.setFieldValue("dates",date || []);    
-                                        formik.setFieldTouched("dates", true, false);
-                                    }}
-                                    
-                                    className="rounded-lg border"
-                                    captionLayout="dropdown"
-                            />
-                            </PopoverContent>
-                            </Popover>
-                            {formik.touched.dates && formik.errors.dates ? (
-                            <p className="text-sm text-red-600">{formik.errors.dates}</p>
-                        ) : null}
+                            </div>
                         </div>
+                        {
+                            formik.values.dateTypes === "range" ? <>
+                            <div>
+                                <div className="flex flex-row gap-4 items-end">
+                                    <div className="flex flex-col gap-2 flex-1">
+                                        <p className='font-text block text-sm font-medium text-gray-700 text-left'>Starting Date</p>
+                                        <div className={`border border-gray-300 rounded-md p-2 w-full ${formik.values.startDate ? "text-black" : "text-gray-500"}`}>
+                                            {formik.values.startDate ? format(formik.values.startDate, "MMM dd yyyy") : "Select a date"}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2 flex-1">
+                                        <p className='font-text block text-sm font-medium text-gray-700 text-left'>Ending Date</p>
+                                        <div className={`border border-gray-300 rounded-md p-2 w-full ${formik.values.endDate ? "text-black" : "text-gray-500"}`}>
+                                            {formik.values.endDate ? format(formik.values.endDate, "MMM dd yyyy") : "Select a date"}
+                                        </div>
+                                    </div>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <div className={`border flex flex-row items-center justify-between text-black border-gray-300 rounded-md p-2 w-fit h-fit aspect-square ${formik.values.dates && formik.values.dates.length > 0 ? "text-black" : "text-gray-500"}`}>
+                                                <Calendar1 className={`${formik.values.Issue_On ? "text-black" : "text-gray-500"}`}/>
+                                            </div>
+                                        </PopoverTrigger>
+                                        <PopoverContent className={"p-0 w-fit"}>
+                                            <Calendar
+                                                mode={formik.values.dateTypes === "single" ? "single" : formik.values.dateTypes === "range" ? "range" : "multiple"}
+                                                numberOfMonths={2}
+                                                defaultMonth={new Date()}
+                                                disabled={(currentDate) => {
+                                                    const day = currentDate.getDay()
+                                                    if (day === 0 || day === 6) return true
+                                                    return hd.some((holiday) => isSameDay(parseISO(holiday.date), currentDate))
+                                                }}
+                                                selected={{
+                                                    from: formik.values.startDate ? formik.values.startDate : new Date(),
+                                                    to: formik.values.endDate ? formik.values.endDate : new Date()
+                                                }}
+                                                onSelect={(date) => {
+                                                    formik.setFieldValue("startDate", date.from);
+                                                    formik.setFieldValue("endDate", date.to);
+                                                }}
+                                                
+                                                className="rounded-lg border"
+                                                captionLayout="dropdown"
+                                        />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                                    {(formik.touched.startDate && formik.errors.startDate) || (formik.touched.endDate && formik.errors.endDate) ? (
+                                    <p className="text-sm text-red-600">
+                                        {formik.errors.startDate || formik.errors.endDate}
+                                    </p>
+                                    ) : null}
+                            </div>
+                            </> : formik.values.dateTypes === "single" ?<>   
+                            <div>
+                                <div className='relative items-center justify-center gap-2'>
+                                    <div>
+                                        <label className='font-text block text-sm font-medium text-gray-700 text-left mb-2' htmlFor="Issue_On">Select the date/s of your leave</label>
+                                    </div>
+                                    <Popover>
+                                    <PopoverTrigger asChild>
+                                        <div className={`border flex flex-row items-center justify-between text-black border-gray-300 rounded-md p-2 w-full ${formik.values.dates && formik.values.dates.length > 0 ? "text-black" : "text-gray-500"}`}>
+                                            {formik.values.dates && formik.values.dates.length > 0 ? `${formik.values.dates.map(d => format(d, "MMM dd")).join(", ")}` : "Select a date"}
+                                            <Calendar1 className={`${formik.values.Issue_On ? "text-black" : "text-gray-500"}`}/>
+                                        </div>
+                                    </PopoverTrigger>
+                                    <PopoverContent className={"p-0 w-fit"}>
+                                        <Calendar
+                                            mode={formik.values.dateTypes === "single" ? "single" : formik.values.dateTypes === "range" ? "range" : "multiple"}
+                                            numberOfMonths={2}
+                                            defaultMonth={new Date()}
+                                            disabled={(currentDate) => {
+                                                const day = currentDate.getDay()
+                                                if (day === 0 || day === 6) return true
+                                                return hd.some((holiday) => isSameDay(parseISO(holiday.date), currentDate))
+                                            }}
+                                            selected={formik.values.dates ? formik.values.dates : []}
+                                            onSelect={(date) => {
+                                                formik.setFieldValue("dates",date || []);    
+                                            }}
+                                            
+                                            className="rounded-lg border"
+                                            captionLayout="dropdown"
+                                    />
+                                    </PopoverContent>
+                                    </Popover>
+                                </div>
+                                {(formik.touched.dates && formik.errors.dates) ? (
+                                <p className="text-sm text-red-600">
+                                    {formik.errors.dates}
+                                </p>
+                                ) : null}
+                            </div>  
+                            </> : <>
+                            <div>
+                                <div className="flex flex-row gap-4 items-end">
+                                    <div className="flex flex-col gap-2 flex-1">
+                                        Number of Selected Days {formik.values.dates ? formik.values.dates.length : 0}
+                                    </div>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <div className={`border flex flex-row items-center justify-between text-black border-gray-300 rounded-md p-2 w-fit h-fit aspect-square ${formik.values.dates && formik.values.dates.length > 0 ? "text-black" : "text-gray-500"}`}>
+                                                <Calendar1 className={`${formik.values.Issue_On ? "text-black" : "text-gray-500"}`}/>
+                                            </div>
+                                        </PopoverTrigger>
+                                        <PopoverContent className={"p-0 w-fit"}>
+                                            <Calendar
+                                                mode={formik.values.dateTypes === "single" ? "single" : formik.values.dateTypes === "range" ? "range" : "multiple"}
+                                                numberOfMonths={2}
+                                                defaultMonth={new Date()}
+                                                disabled={(currentDate) => {
+                                                    const day = currentDate.getDay()
+                                                    if (day === 0 || day === 6) return true
+                                                    return hd.some((holiday) => isSameDay(parseISO(holiday.date), currentDate))
+                                                }}
+                                                selected={formik.values.dates ? formik.values.dates : []}
+                                                onSelect={(date) => {
+                                                    formik.setFieldValue("dates",date || []);    
+                                                }}
+                                                
+                                                className="rounded-lg border"
+                                                captionLayout="dropdown"
+                                        />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                                {(formik.touched.dates && formik.errors.dates) ? (
+                                <p className="text-sm text-red-600">
+                                    {formik.errors.dates}
+                                </p>
+                                ) : null}
+                            </div>
+                            </>
+                        }
                         
                     </div>
                     </>
