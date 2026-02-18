@@ -863,7 +863,7 @@ Yup.object({
                 <div className="flex flex-row gap-5">
                     {
                         stage > 0  ?
-                        <button type="button" onClick={()=>{setStage(prev => prev - 1)}} className='w-full flex flex-row justify-between mt-5 text-gray-700 font-text rounded-md hover:bg-gray-400 p-4 transition-all ease-in-out cursor-pointer border border-gray-300'>
+                        <button type="button" onClick={()=>{setStage(prev => prev - 1)}} disabled={submitting} className='w-full flex flex-row justify-between mt-5 text-gray-700 font-text rounded-md hover:bg-gray-400 p-4 transition-all ease-in-out cursor-pointer border border-gray-300'>
                             <ChevronLeft className="mr-2"/>
                             <p>Back</p>
                         </button> : null
@@ -874,7 +874,7 @@ Yup.object({
                             <p>Next</p>
                             <ChevronRight className="ml-2"/>
                            
-                        </button> : <button type="submit" onClick={()=>{}} disabled= {submitting} className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer'>
+                        </button> : <button type="submit" onClick={()=>{}} disabled={submitting} className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer'>
                             <p>{submitting ? "Submitting..." : "Submit Application"}</p>
                             <ChevronRight className="ml-2"/>
                         </button>
