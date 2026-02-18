@@ -20,8 +20,9 @@ import {
 } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Calendar1, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as Yup from 'yup';
+import { format } from "date-fns";
 
 export default function Leave_Form() {
     const officeOptions = [
@@ -84,7 +85,7 @@ export default function Leave_Form() {
         ]
       const allowedDomain = ["gmail.com", "yahoo.com", "outlook.com", "company.com"];
 
-    const [stage, setStage] = useState(0)
+    const [stage, setStage] = useState(2)
     const handleNext = async (formik) => {
         
         const errors = await formik.validateForm();
@@ -198,8 +199,7 @@ export default function Leave_Form() {
             otherSpecification:"",
             otherPurposeSpecification:"",
             // Duration of Leave
-            startDate:"",
-            endDate:"",
+            dates:[] // stagger dates from now on
         },
         validationSchema: validationSchema[stage],
         onSubmit: (values) => {
@@ -207,6 +207,10 @@ export default function Leave_Form() {
             setStage(prev => prev + 1)
         }
     })
+
+    // useEffect(() => {
+    //     console.log(formik.values.dates)
+    // },[formik.values.dates])
 
     return <>
         <div className='bg-white w-xl h-xl rounded-xl p-6 space-y-5'>
@@ -649,23 +653,20 @@ export default function Leave_Form() {
                             <Popover>
                             <PopoverTrigger asChild>
                                 <div className={`border flex flex-row items-center justify-between text-black border-gray-300 rounded-md p-2 w-full ${formik.values.Issue_On ? "text-black" : "text-gray-500"}`}>
-                                    {formik.values.startDate || formik.values.endDate ? `${new Date(formik.values.startDate).toLocaleDateString()} - ${new Date(formik.values.endDate).toLocaleDateString()}` : "Select a date"}
+                                    {formik.values.dates && formik.values.dates.length > 0 ? `${formik.values.dates.map(d => format(d, "MMM dd")).join(", ")}` : "Select a date"}
                                     <Calendar1 className={`${formik.values.Issue_On ? "text-black" : "text-gray-500"}`}/>
                                 </div>
                             </PopoverTrigger>
                             <PopoverContent className={"p-0 w-fit"}>
                                 <Calendar
-                                    mode="range"
+                                    mode="multiple"
                                     numberOfMonths={2}
-                                    defaultMonth={formik.values.startDate ? new Date(formik.values.startDate) : undefined}
-                                    selected={{
-                                        from: formik.values.startDate ? new Date(formik.values.startDate) : undefined,
-                                        to: formik.values.endDate ? new Date(formik.values.endDate) : undefined
+                                    defaultMonth={new Date()}
+                                    selected={formik.values.dates ? formik.values.dates : []}
+                                    onSelect={(date) => {
+                                        formik.setFieldValue("dates", date);    
                                     }}
-                                    onSelect={(dates) => {
-                                        formik.setFieldValue("startDate", dates?.from ? dates.from.toISOString() : "");
-                                        formik.setFieldValue("endDate", dates?.to ? dates.to.toISOString() : "");
-                                    }}
+                                    
                                     className="rounded-lg border"
                                     captionLayout="dropdown"
                                     disabled={(date) => date < new Date()}
