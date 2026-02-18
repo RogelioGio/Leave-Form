@@ -111,7 +111,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(2)
+  const [stage, setStage] = useState(0)
    const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -250,7 +250,7 @@ export default function Leave_Form({ setSubmitted }) {
           schema
             .required("Required to specify the details for In Hospital")
             .matches(
-              /^[a-zA-Z\s\-\.\']+$/,
+              /^[a-zA-Z\s\-\.\'\,]+$/,
               "Illness name cannot contain numbers or special symbols (@, #, !, etc.)",
             ),
         otherwise: (schema) => schema.notRequired(),
@@ -277,7 +277,7 @@ export default function Leave_Form({ setSubmitted }) {
                 "Required to specify the details for Special Leave Benefits for Women",
               )
               .matches(
-                /^[a-zA-Z\s\-\.\']+$/,
+                /^[a-zA-Z\s\-\.\'\,]+$/,
                 "Details cannot contain numbers or special symbols (@, #, !, etc.)",
               ),
           otherwise: () => Yup.string().notRequired(),
@@ -299,7 +299,7 @@ export default function Leave_Form({ setSubmitted }) {
               "Required to specify which type of leave the employee wants to avail",
             )
             .matches(
-              /^[a-zA-Z\s\-\.\']+$/,
+              /^[a-zA-Z\s\-\.\'\,]+$/,
               "Details cannot contain numbers or special symbols (@, #, !, etc.)",
             ),
         otherwise: () => Yup.string().notRequired(),
@@ -896,15 +896,25 @@ Yup.object({
                         </button> : null
                     }
                     {
-                        stage < 2 ?
-                        <button type="button" onClick={()=>handleNext(formik)} className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer'>
-                            <p>Next</p>
-                            <ChevronRight className="ml-2"/>
-                           
-                        </button> : <button type="submit" onClick={()=>{}} disabled={submitting} className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer'>
-                            <p>{submitting ? "Submitting..." : "Submit Application"}</p>
-                            <ChevronRight className="ml-2"/>
-                        </button>
+                        stage < 2 ? (
+    <button 
+      type="button" 
+      onClick={() => handleNext(formik)} 
+      className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer'
+    >
+      <p>Next</p>
+      <ChevronRight className="ml-2"/>
+    </button>
+  ) : (
+    <button 
+      type="submit" 
+      disabled={submitting} 
+      className='w-full flex flex-row justify-between mt-5 bg-gray-800 text-white font-text rounded-md hover:bg-gray-700 p-4 transition-all ease-in-out cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+    >
+      <p>{submitting ? "Submitting..." : "Submit Application"}</p>
+      <ChevronRight className="ml-2"/>
+    </button>
+  )
                     }
                 </div>
                 
