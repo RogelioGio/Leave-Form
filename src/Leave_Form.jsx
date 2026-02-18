@@ -22,9 +22,29 @@ import { useFormik } from "formik";
     import * as Yup from "yup";
     import { toast } from "sonner";
     import Completed from "./Completed";
-    import { format } from "date-fns";
+    import { format, isSameDay, parseISO } from "date-fns";
+import Holidays from "date-holidays";
 
 export default function Leave_Form({ setSubmitted }) {
+    const [hd, setHd] = useState(null)
+
+
+    useEffect(()=>{
+        const getHolidays = async () => {
+            const currentYear = new Date().getFullYear();
+            const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${currentYear}/PH`);
+
+            if (res.ok) {
+                const data = await res.json();
+                console.log("Fetched holidays:", data);
+                setHd(data);
+            }
+        }
+
+        getHolidays();
+    },[])
+
+
   const officeOptions = [
     "Office of the Administrator",
     "Office of the Deputy Administrator",
@@ -91,7 +111,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(1);
+  const [stage, setStage] = useState(2)
    const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -840,6 +860,11 @@ Yup.object({
                                     mode="multiple"
                                     numberOfMonths={2}
                                     defaultMonth={new Date()}
+                                    disabled={(currentDate) => {
+                                        const day = currentDate.getDay()
+                                        if (day === 0 || day === 6) return true
+                                        return hd.some((holiday) => isSameDay(parseISO(holiday.date), currentDate))
+                                    }}
                                     selected={formik.values.dates ? formik.values.dates : []}
                                     onSelect={(date) => {
                                         formik.setFieldValue("dates",date || []);    
@@ -848,7 +873,6 @@ Yup.object({
                                     
                                     className="rounded-lg border"
                                     captionLayout="dropdown"
-                                    disabled={(date) => date < new Date()}
                             />
                             </PopoverContent>
                             </Popover>
