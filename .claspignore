@@ -1,0 +1,14 @@
+
+node_modules/**
+.git/**
+
+
+package.json
+package-lock.json
+vite.config.js
+tsconfig.json
+.gitignore
+README.md
+
+src/**
+public/**

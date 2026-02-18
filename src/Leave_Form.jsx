@@ -1,180 +1,297 @@
-import { useFormik } from "formik"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
-import { Calendar1, CalendarCheck, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
-import * as Yup from 'yup';
-import { format } from "date-fns";
+import { useFormik } from "formik";
+    import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuTrigger,
+    } from "@/components/ui/dropdown-menu";
+    import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+    } from "@/components/ui/popover";
+    import { Calendar } from "@/components/ui/calendar";
+    import {
+    Calendar1,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    } from "lucide-react";
+    import { useEffect, useState } from "react";
+    import * as Yup from "yup";
+    import { toast } from "sonner";
+    import Completed from "./Completed";
+    import { format } from "date-fns";
 
-export default function Leave_Form() {
-    const officeOptions = [
-        "Office of the Administrator",
-        "Office of the Deputy Administrator",
-        "Information and Communications Technology Division",
-        "LRA-Comprehensive Agrarian Reform Program (CARP)",
-        "Planning and Management Division",
-        "Office of the Director, Administrative Service",
-        "Human Resource Development Division",
-        "Recruitment Management Unit",
-        "General Services Division",
-        "Property and Supply Section",
-        "Central Records Section",
-        "Cashiering Services Section",
-        "Public Relations and Information Section / Public Assistance Complaint Desk",
-        "Office of the Director, Finance Service",
-        "Budget Division",
-        "Budget Section",
-        "Statistical Section",
-        "Accounting Division",
-        "Revenue Section",
-        "Disbursement Section",
-        "Office of the Director, Land Registration Operations Service",
-        "Original Registration Division",
-        "Land Projection Section",
-        "Plan Examination Section",
-        "Records and Verification Section",
-        "Subdivision and Consolidation Division - Vault One (I) and Vault Two (II) Section",
-        "Cadastral Decree Section",
-        "Ordinary Decree Section",
-        "Subdivision and Consolidation Division",
-        "Plotting and Examination Section",
-        "Docket Division",
-        "Publication of Notices Section",
-        "Documentation and Index Section",
-        "Docket Vault Section",
-        "Office of the Director, Legal Service",
-        "Legal Division",
-        "Land Registration Monitoring Division",
-        "Land Registration Cases Division",
-        "Reconstitution Division"
-        ];
+export default function Leave_Form({ setSubmitted }) {
+  const officeOptions = [
+    "Office of the Administrator",
+    "Office of the Deputy Administrator",
+    "Information and Communications Technology Division",
+    "LRA-Comprehensive Agrarian Reform Program (CARP)",
+    "Planning and Management Division",
+    "Office of the Director, Administrative Service",
+    "Human Resource Development Division",
+    "Recruitment Management Unit",
+    "General Services Division",
+    "Property and Supply Section",
+    "Central Records Section",
+    "Cashiering Services Section",
+    "Public Relations and Information Section / Public Assistance Complaint Desk",
+    "Office of the Director, Finance Service",
+    "Budget Division",
+    "Budget Section",
+    "Statistical Section",
+    "Accounting Division",
+    "Revenue Section",
+    "Disbursement Section",
+    "Office of the Director, Land Registration Operations Service",
+    "Original Registration Division",
+    "Land Projection Section",
+    "Plan Examination Section",
+    "Records and Verification Section",
+    "Subdivision and Consolidation Division - Vault One (I) and Vault Two (II) Section",
+    "Cadastral Decree Section",
+    "Ordinary Decree Section",
+    "Subdivision and Consolidation Division",
+    "Plotting and Examination Section",
+    "Docket Division",
+    "Publication of Notices Section",
+    "Documentation and Index Section",
+    "Docket Vault Section",
+    "Office of the Director, Legal Service",
+    "Legal Division",
+    "Land Registration Monitoring Division",
+    "Land Registration Cases Division",
+    "Reconstitution Division",
+  ];
 
-    const typeOfLeaveOptions = [
-        "Vacation Leave (Sec. 51, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-        "Mandatory/Forced Leave (Sec. 25, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-        "Sick Leave (Sec. 43, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-        "Maternity Leave (R.A. No. 11210 / IRR issued by CSC, DOLE and SSS)",
-        "Paternity Leave (R.A. No. 8187 / CSC MC No. 71, s. 1998, as amended)",
-        "Special Privilege Leave (Sec. 21, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-        "Solo Parent Leave (RA No. 8972 / CSC MC No. 8, s. 2004)",
-        "Study Leave (Sec. 68, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-        "10-Day VAWC Leave (RA No. 9262 / CSC MC No. 15, s. 2005)",
-        "Rehabilitation Privilege (Sec. 55, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-        "Special Leave Benefits for Women (RA No. 9710 / CSC MC No. 25, s. 2010)",
-        "Special Emergency (Calamity) Leave (CSC MC No. 2, s. 2012, as amended)",
-        "Adoption Leave (R.A. No. 8552)",
-        "Others"
-        ]
-      const allowedDomain = ["gmail.com", "yahoo.com", "outlook.com", "company.com"];
+  const typeOfLeaveOptions = [
+    "Vacation Leave (Sec. 51, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+    "Mandatory/Forced Leave (Sec. 25, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+    "Sick Leave (Sec. 43, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+    "Maternity Leave (R.A. No. 11210 / IRR issued by CSC, DOLE and SSS)",
+    "Paternity Leave (R.A. No. 8187 / CSC MC No. 71, s. 1998, as amended)",
+    "Special Privilege Leave (Sec. 21, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+    "Solo Parent Leave (RA No. 8972 / CSC MC No. 8, s. 2004)",
+    "Study Leave (Sec. 68, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+    "10-Day VAWC Leave (RA No. 9262 / CSC MC No. 15, s. 2005)",
+    "Rehabilitation Privilege (Sec. 55, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+    "Special Leave Benefits for Women (RA No. 9710 / CSC MC No. 25, s. 2010)",
+    "Special Emergency (Calamity) Leave (CSC MC No. 2, s. 2012, as amended)",
+    "Adoption Leave (R.A. No. 8552)",
+    "Others",
+  ];
 
-    const [stage, setStage] = useState(2)
-    const handleNext = async (formik) => {
-        
-        const errors = await formik.validateForm();
+  const allowedDomain = [
+    "gmail.com",
+    "yahoo.com",
+    "outlook.com",
+    "company.com",
+  ];
 
-        const stepFields = [
-            ["email", "fullName", "office", "position", "salaryGrade"],
-            ["typeOfLeave", "vacationSpecialPrivilegeLeaveSpecifications", "abroadSpecification", "sickLeaveSpecification", "inHospitalSpecification", "outpatientSpecification", "specialLeaveBenefitsForWomenSpecification", "studyLeaveReason", "otherSpecification", "otherPurposeSpecification"],
-            ["startDate", "endDate"]
-        ]
+  const [stage, setStage] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-        const currentFields = stepFields[stage];
+  const handleNext = async (formik) => {
+    const errors = await formik.validateForm();
 
-        const hasErrors = currentFields.some(field => errors[field]);
-        if (!hasErrors) {
-            formik.setTouched({});
-            formik.setErrors({});
-            setStage(prev => prev + 1);
-        } else {
-            const touchedFields = {};
-            currentFields.forEach(field => {
-                touchedFields[field] = true;
-            });
-            formik.setTouched(touchedFields);
-            console.log("Validation errors:", errors);
-        }
+    const stepFields = [
+      ["email", "fullName", "office", "position", "salaryGrade"],
+      [
+        "typeOfLeave",
+        "vacationSpecialPrivilegeLeaveSpecifications",
+        "abroadSpecification",
+        "sickLeaveSpecification",
+        "inHospitalSpecification",
+        "outpatientSpecification",
+        "specialLeaveBenefitsForWomenSpecification",
+        "studyLeaveReason",
+        "otherSpecification",
+        "otherPurposeSpecification",
+      ],
+      ["startDate", "endDate"],
+    ];
+
+    const currentFields = stepFields[stage];
+
+    const hasErrors = currentFields.some((field) => errors[field]);
+    if (!hasErrors) {
+      formik.setTouched({});
+      setStage((prev) => prev + 1);
+    } else {
+      const touchedFields = {};
+      currentFields.forEach((field) => {
+        touchedFields[field] = true;
+      });
+      formik.setTouched(touchedFields);
     }
+  };
 
+  const validationSchema = [
+    // STAGE 0
+    Yup.object({
+      email: Yup.string()
+        .email("Invalid email address")
+        .required("Requester Email is required")
+        .test(
+          "is-company-domain",
+          "only valid email domains are allowed",
+          (value) => {
+            if (!value) return false;
+            const domain = value.substring(value.lastIndexOf("@") + 1);
+            return allowedDomain.includes(domain.toLowerCase());
+          },
+        ),
+      fullName: Yup.string()
+        .trim()
+        .required("Requestor Name is required")
+        .max(50, "Requestor Name must be at most 50 characters")
+        .min(5, "Requestor Name must be at least 5 characters")
+        .matches(
+          /^[a-zA-Z\s.,]+$/,
+          "Requestor Name can only contain letters, spaces, and commas",
+        ),
+      office: Yup.string()
+        .required("Office/Department is required")
+        .max(100, "Office/Department must be at most 100 characters"),
+      position: Yup.string()
+        .required("Position is required")
+        .max(50, "Position must be at most 50 characters")
+        .min(2, "Position must be at least 2 characters")
+        .matches(
+          /^[a-zA-Z\s.,]+$/,
+          "Position can only contain letters, spaces, and commas",
+        ),
+      salaryGrade: Yup.string()
+        .required("Salary Grade is required")
 
-    //Section validation for each stage of the form
-    const validationSchema = [
-        Yup.object({
-            email: Yup.string().email('Invalid email address').required('Requester Email is required').test(
-            'is-company-domain',
-            'only valid email domains are allowed',
-            (value) => {
-                if (!value) return false; // If the field is empty, it's invalid
-                const domain = value.substring(value.lastIndexOf("@") + 1);
-                return allowedDomain.includes(domain.toLowerCase());
-            }
-            ),
-            fullName: Yup.string().trim().required('Requestor Name is required').max(50, 'Requestor Name must be at most 50 characters').min(5, 'Requestor Name must be at least 5 characters').matches(/^[a-zA-Z\s.,]+$/, 'Requestor Name can only contain letters, spaces, and commas'),
-            office: Yup.string().required('Office/Department is required').max(100, 'Office/Department must be at most 100 characters'),
-            position: Yup.string().required('Position is required').max(50, 'Position must be at most 50 characters').min(2, 'Position must be at least 2 characters').matches(/^[a-zA-Z\s.,]+$/, 'Position can only contain letters, spaces, and commas'),
-            salaryGrade: Yup.string().required('Salary Grade is required').max(10, 'Salary Grade must be at most 10 characters').min(2, 'Salary Grade must be at least 2 characters').matches(/^SG\d+$/, 'Salary Grade must start with "SG" followed by numbers'),
+        .matches(
+          /^SG\d+$/,
+          'Salary Grade must start with "SG" followed by numbers',
+        )
+        .test("range", "Salary Grade must be between SG1 and SG33", (value) => {
+          if (!value) return true;
+
+          const numberPart = parseInt(value.replace("SG", ""), 10);
+          return numberPart >= 1 && numberPart <= 33;
         }),
-        Yup.object({
-            typeOfLeave: Yup.string().required('Required to select type of leave'),
-            vacationSpecialPrivilegeLeaveSpecifications: Yup.string().when('typeOfLeave', {
-                is: (value) => value === "Vacation Leave (Sec. 51, Rule XVI, Omnibus Rules Implementing E.O. No. 292)" || value === "Special Privilege Leave (Sec. 21, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-                then: () => Yup.string().required('Required to specify if the leave is within the Philippines or abroad'),
-                otherwise: () => Yup.string().notRequired()
-            }),
-            abroadSpecification: Yup.string().when('vacationSpecialPrivilegeLeaveSpecifications', {
-                is: "Abroad",
-                then: () => Yup.string().required('Required to specify the country to be visited'),
-                otherwise: () => Yup.string().notRequired() 
-            }),
-            sickLeaveSpecification: Yup.string().when('typeOfLeave', {
-                is: "Sick Leave (Sec. 43, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-                then: () => Yup.string().required('Required to specify if the employee is an In Hospital or Outpatient'),
-                otherwise: () => Yup.string().notRequired()
-            }),
-            inHospitalSpecification: Yup.string().when("sickLeaveSpecification", (value, schema) => {
-                return value === "In Hospital"
-                    ? schema.required("Required to specify the details for In Hospital")
-                    : schema.notRequired();
-            }),
-                        outpatientSpecification: Yup.string().when("sickLeaveSpecification", (value, schema) => {
-                return value === "Outpatient"
-                    ? schema.required("Required to specify the details for Outpatient")
-                    : schema.notRequired();
-            }),
-            specialLeaveBenefitsForWomenSpecification: Yup.string().when('typeOfLeave', {
-                is: "Special Leave Benefits for Women (RA No. 9710 / CSC MC No. 25, s. 2010)",
-                then: () => Yup.string().required('Required to specify the details for Special Leave Benefits for Women'),
-                otherwise: () => Yup.string().notRequired()
-            }),
-            studyLeaveReason: Yup.string().when('typeOfLeave', {
-                is: "Study Leave (Sec. 68, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-                then: () => Yup.string().required('Required to specify the reason of study leave'),
-                otherwise: () => Yup.string().notRequired()
-            }),
-            otherSpecification: Yup.string().when('typeOfLeave', {
-                is: "Others",
-                then: () => Yup.string().required('Required to specify which type of leave the employee wants to avail'),
-                otherwise: () => Yup.string().notRequired()
-            })
-        })
-    ]
+    }),
+    // STAGE 1
+    Yup.object({
+      typeOfLeave: Yup.string().required("Required to select type of leave"),
+      vacationSpecialPrivilegeLeaveSpecifications: Yup.string().when(
+        "typeOfLeave",
+        {
+          is: (value) =>
+            value ===
+              "Vacation Leave (Sec. 51, Rule XVI, Omnibus Rules Implementing E.O. No. 292)" ||
+            value ===
+              "Special Privilege Leave (Sec. 21, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+          then: () =>
+            Yup.string().required(
+              "Required to specify if the leave is within the Philippines or abroad",
+            ),
+          otherwise: () => Yup.string().notRequired(),
+        },
+      ),
+      abroadSpecification: Yup.string().when(
+        "vacationSpecialPrivilegeLeaveSpecifications",
+        {
+          is: "Abroad",
+          then: (schema) =>
+            schema
+              .required("Required to specify the country to be visited")
+              .trim() // Removes accidental spaces at start/end
+              .min(2, "Country name must be at least 2 characters")
+              .max(60, "Country name is too long")
+              // ALLOWS: Letters, Spaces, Dots (.), Hyphens (-), Apostrophes (')
+              .matches(
+                /^[a-zA-Z\s\-\.\']+$/,
+                "Country name cannot contain numbers or special symbols (@, #, !, etc.)",
+              ),
+          otherwise: (schema) => schema.notRequired(),
+        },
+      ),
+      sickLeaveSpecification: Yup.string().when("typeOfLeave", {
+        is: "Sick Leave (Sec. 43, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+        then: (schema) =>
+          schema.required(
+            "Required to specify if the employee is an In Hospital or Outpatient",
+          ),
+        otherwise: (schema) => schema.notRequired(),
+      }),
+
+      inHospitalSpecification: Yup.string().when("sickLeaveSpecification", {
+        is: "In Hospital",
+        then: (schema) =>
+          schema
+            .required("Required to specify the details for In Hospital")
+            .matches(
+              /^[a-zA-Z\s\-\.\']+$/,
+              "Illness name cannot contain numbers or special symbols (@, #, !, etc.)",
+            ),
+        otherwise: (schema) => schema.notRequired(),
+      }),
+
+      outpatientSpecification: Yup.string().when("sickLeaveSpecification", {
+        is: "Outpatient",
+        then: (schema) =>
+          schema
+            .required("Required to specify the details for Outpatient")
+            .matches(
+              /^[a-zA-Z\s\-\.\']+$/,
+              "Illness name cannot contain numbers or special symbols (@, #, !, etc.)",
+            ),
+        otherwise: (schema) => schema.notRequired(),
+      }),
+      specialLeaveBenefitsForWomenSpecification: Yup.string().when(
+        "typeOfLeave",
+        {
+          is: "Special Leave Benefits for Women (RA No. 9710 / CSC MC No. 25, s. 2010)",
+          then: () =>
+            Yup.string()
+              .required(
+                "Required to specify the details for Special Leave Benefits for Women",
+              )
+              .matches(
+                /^[a-zA-Z\s\-\.\']+$/,
+                "Details cannot contain numbers or special symbols (@, #, !, etc.)",
+              ),
+          otherwise: () => Yup.string().notRequired(),
+        },
+      ),
+      studyLeaveReason: Yup.string().when("typeOfLeave", {
+        is: "Study Leave (Sec. 68, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
+        then: () =>
+          Yup.string().required(
+            "Required to specify the reason of study leave",
+          ),
+        otherwise: () => Yup.string().notRequired(),
+      }),
+      otherSpecification: Yup.string().when("typeOfLeave", {
+        is: "Others",
+        then: () =>
+          Yup.string()
+            .required(
+              "Required to specify which type of leave the employee wants to avail",
+            )
+            .matches(
+              /^[a-zA-Z\s\-\.\']+$/,
+              "Details cannot contain numbers or special symbols (@, #, !, etc.)",
+            ),
+        otherwise: () => Yup.string().notRequired(),
+      }),
+    }),
+
+    // STAGE 2
+    Yup.object({
+      startDate: Yup.string().required("Start date is required"),
+      endDate: Yup.string().required("End date is required"),
+    }),
+  ];
 
     const formik = useFormik({
         initialValues: {
@@ -706,4 +823,5 @@ export default function Leave_Form() {
             </form>
         </div>
     </>
+    
 }
