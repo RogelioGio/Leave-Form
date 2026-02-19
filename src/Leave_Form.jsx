@@ -85,6 +85,7 @@ export default function Leave_Form({ setSubmitted }) {
     "Land Registration Monitoring Division",
     "Land Registration Cases Division",
     "Reconstitution Division",
+    "Others"
   ];
 
   const typeOfLeaveOptions = [
@@ -177,6 +178,12 @@ export default function Leave_Form({ setSubmitted }) {
       office: Yup.string()
         .required("Office/Department is required")
         .max(100, "Office/Department must be at most 100 characters"),
+    otherOfficesAndPostion: Yup.string().required()
+        .when("office", {
+        is: "Others",
+        then: () => Yup.string().required("Please specify your office/department").max(100, "Office/Department must be at most 100 characters"),
+        otherwise: () => Yup.string().notRequired()
+    }),
       position: Yup.string()
         .required("Position is required")
         .max(50, "Position must be at most 50 characters")
@@ -341,6 +348,7 @@ export default function Leave_Form({ setSubmitted }) {
             office:"",
             position:"",
             salaryGrade:"SG",
+            otherOfficesAndPostion: "",
             typeOfLeave:"",
             //  Vacation/Special Privilege Leave
             vacationSpecialPrivilegeLeaveSpecifications:"",
@@ -479,7 +487,7 @@ export default function Leave_Form({ setSubmitted }) {
                                 minLength="5"
                                 onBlur={formik.handleBlur}
                                 onChange={(e) => {
-                                const onlyLetters = e.target.value.replace(/[^a-zA-Z\s.,]/g, '');
+                                const onlyLetters = e.target.value.replace(/[^a-zA-Z\s.,\-]/g, '');
                                 formik.setFieldValue("fullName", onlyLetters);
                                 }}
                                 value={formik.values.fullName}
@@ -514,6 +522,33 @@ export default function Leave_Form({ setSubmitted }) {
                                 <p className="text-sm text-red-600">{formik.errors.office}</p>
                             ) : null}
                         </div>
+                        {
+                            formik.values.office === "Others" ?
+                            <>
+                            <div>
+                                <div className='flex flex-row justify-between'>
+                                    <label className='font-text block text-sm font-medium text-gray-700 text-left mb' htmlFor="otherOfficesAndPostion">Other Office Specification</label>
+                                    <p className='text-sm text-gray-500'>Required</p>
+                                </div>
+                                <input
+                                    className='border text-black border-gray-300 rounded-md p-2 w-full '
+                                    id="otherOfficesAndPostion"
+                                    name="otherOfficesAndPostion"
+                                    type="text"
+                                    maxLength={50}
+                                    onBlur={formik.handleBlur}
+                                    placeholder='If not in the dropdown list, please specify'
+                                    onChange={formik.handleChange}
+                                    value={formik.values.otherOfficesAndPostion}
+                                />
+                            {formik.touched.otherOfficesAndPostion && formik.errors.otherOfficesAndPostion ? (
+                                <p className="text-sm text-red-600">{formik.errors.otherOfficesAndPostion}</p>
+                            ) : null}
+                            </div> 
+                            
+                            </>
+                           : null
+                        }
                         <div>
                             <div className='flex flex-row justify-between'>
                                 <label className='font-text block text-sm font-medium text-gray-700 text-left mb-2' htmlFor="position">Position</label>
@@ -524,6 +559,7 @@ export default function Leave_Form({ setSubmitted }) {
                                 id="position"
                                 name="position"
                                 type="text"
+                                maxLength={50}
                                 onBlur={formik.handleBlur}
                                 placeholder='Your current position'
                                 onChange={formik.handleChange}
