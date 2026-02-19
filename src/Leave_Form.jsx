@@ -112,7 +112,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(0);
+  const [stage, setStage] = useState(2);
    const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -939,22 +939,24 @@ export default function Leave_Form({ setSubmitted }) {
                             formik.values.dateTypes === "range" ? <>
                             <div>
                                 <div className="flex flex-row gap-4 items-end">
-                                    <div className="flex flex-col gap-2 flex-1">
-                                        <p className='font-text block text-sm font-medium text-gray-700 text-left'>Starting Date</p>
-                                        <div className={`border border-gray-300 rounded-md p-2 w-full ${formik.values.startDate ? "text-black" : "text-gray-500"}`}>
-                                            {formik.values.startDate ? format(formik.values.startDate, "MMM dd yyyy") : "Select a date"}
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-2 flex-1">
-                                        <p className='font-text block text-sm font-medium text-gray-700 text-left'>Ending Date</p>
-                                        <div className={`border border-gray-300 rounded-md p-2 w-full ${formik.values.endDate ? "text-black" : "text-gray-500"}`}>
-                                            {formik.values.endDate ? format(formik.values.endDate, "MMM dd yyyy") : "Select a date"}
-                                        </div>
-                                    </div>
+                                    
                                     <Popover>
-                                        <PopoverTrigger asChild>
-                                            <div className={`border flex flex-row items-center justify-between text-black border-gray-300 rounded-md p-2 w-fit h-fit aspect-square ${formik.values.dates && formik.values.dates.length > 0 ? "text-black" : "text-gray-500"}`}>
+                                        <PopoverTrigger className='flex flex-row gap-2 w-full justify-between items-center cursor-pointer'>
+                                            {/* <div className={`border flex flex-row items-center justify-between text-black border-gray-300 rounded-md p-2 w-fit h-fit aspect-square ${formik.values.dates && formik.values.dates.length > 0 ? "text-black" : "text-gray-500"}`}>
                                                 <Calendar1 className={`${formik.values.Issue_On ? "text-black" : "text-gray-500"}`}/>
+                                            </div> */}
+
+                                            <div className="flex flex-col gap-2 flex-1 text-left">
+                                                <p className='font-text block text-sm font-medium text-gray-700 text-left'>Starting Date</p>
+                                                <div className={`border border-gray-300 rounded-md p-2 w-full ${formik.values.startDate ? "text-black" : "text-gray-500"}`}>
+                                                    {formik.values.startDate ? format(formik.values.startDate, "MMM dd yyyy") : "Select a date"}
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col gap-2 flex-1  text-left">
+                                                <p className='font-text block text-sm font-medium text-gray-700 text-left'>Ending Date</p>
+                                                <div className={`border border-gray-300 rounded-md p-2 w-full ${formik.values.endDate ? "text-black" : "text-gray-500"}`}>
+                                                    {formik.values.endDate ? format(formik.values.endDate, "MMM dd yyyy") : "Select a date"}
+                                                </div>
                                             </div>
                                         </PopoverTrigger>
                                         <PopoverContent className={"p-0 w-fit"}>
