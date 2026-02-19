@@ -111,7 +111,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(2);
+  const [stage, setStage] = useState(0);
    const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -324,6 +324,11 @@ export default function Leave_Form({ setSubmitted }) {
           then: (schema) => schema.min(1, "You must select at least one date"),
           otherwise: (schema) => schema.notRequired(),
         }),
+        singleDate: Yup.date().when("dateTypes", {
+          is: "single",
+          then: (schema) => schema.required("Required to select date"),
+          otherwise: (schema) => schema.notRequired(),
+        }),
     })
   
 
@@ -353,6 +358,7 @@ export default function Leave_Form({ setSubmitted }) {
             otherPurposeSpecification:"",
             // Duration of Leave
             dateTypes: "single", // default to single date selection eg: single range and stagger
+            singleDate: null,
             startDate: null,
             endDate: null,
             dates:[] // stagger dates from now on
@@ -980,9 +986,9 @@ export default function Leave_Form({ setSubmitted }) {
                                     </PopoverContent>
                                     </Popover>
                                 </div>
-                                {(formik.touched.dates && formik.errors.dates) ? (
+                                {(formik.touched.singleDate && formik.errors.singleDate) ? (
                                 <p className="text-sm text-red-600">
-                                    {formik.errors.dates}
+                                    {formik.errors.singleDate}
                                 </p>
                                 ) : null}
                             </div>  
