@@ -133,7 +133,7 @@ export default function Leave_Form({ setSubmitted }) {
         "otherSpecification",
         "otherPurposeSpecification",
       ],
-      ["dates"],
+      ["dates", "singleDate", "startDate", "endDate", "dateTypes"],
     ];
 
     const currentFields = stepFields[stage];
@@ -321,7 +321,7 @@ export default function Leave_Form({ setSubmitted }) {
     Yup.object({
       dateTypes: Yup.string().required("Required to select duration of leave"),
       startDate: Yup.date().when("dateTypes", {
-        is: "single",
+        is: "range",
         then: (schema) => schema.required("Required to select date"),
         otherwise: (schema) => schema.notRequired(),
       }),
