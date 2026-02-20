@@ -112,7 +112,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(0);
+  const [stage, setStage] = useState(2);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -318,6 +318,7 @@ export default function Leave_Form({ setSubmitted }) {
       }),
     }),
 
+    // STAGE 2 Validation Correction
     Yup.object({
       dateTypes: Yup.string().required("Required to select duration of leave"),
       startDate: Yup.date().when("dateTypes", {
@@ -327,17 +328,13 @@ export default function Leave_Form({ setSubmitted }) {
       }),
       endDate: Yup.date().when("dateTypes", {
         is: "range",
-        then: (schema) => schema.required("Required to select date"),
+        then: (schema) => schema.required("End date is required"),
         otherwise: (schema) => schema.notRequired(),
       }),
+      // Multiple dates check
       dates: Yup.array().when("dateTypes", {
         is: "multiple",
-        then: (schema) => schema.min(1, "You must select at least one date"),
-        otherwise: (schema) => schema.notRequired(),
-      }),
-      singleDate: Yup.date().when("dateTypes", {
-        is: "single",
-        then: (schema) => schema.required("Required to select date"),
+        then: (schema) => schema.min(1, "Select at least one date"),
         otherwise: (schema) => schema.notRequired(),
       }),
     }),
@@ -1479,7 +1476,14 @@ export default function Leave_Form({ setSubmitted }) {
                                 formik.values.dates ? formik.values.dates : []
                               }
                               onSelect={(date) => {
-                                formik.setFieldValue("dates", date || []);
+                                const selectedDate = date || null;
+                                formik.setFieldValue(
+                                  "singleDate",
+                                  selectedDate,
+                                );
+                                // Synchronize with the main start/end fields so validation passes
+                                formik.setFieldValue("startDate", selectedDate);
+                                formik.setFieldValue("endDate", selectedDate);
                               }}
                               className="rounded-lg border"
                               captionLayout="dropdown"
