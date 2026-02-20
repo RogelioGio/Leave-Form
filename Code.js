@@ -8,45 +8,153 @@ function doGet() {
   );
 }
 
+// --- CONFIGURATION ---
+const MAIN_SHEET_NAME = "LRA_Leave_Applications";
+const PDF_TEMPLATE_SHEET = "LeaveApplicationFormTemplate";
+const PDF_FOLDER_ID = "1L_EG3hJXfGwAHI7QbBihCN1aWegD1E7e"; // Keep your folder ID
+const LOGGING = true;
+
 function saveForm(values) {
   const lock = LockService.getScriptLock();
-  // Wait for up to 10 seconds for other processes to finish.
+
   if (lock.tryLock(10000)) {
     try {
-      // 1. OPEN THE SHEET
       const ss = SpreadsheetApp.getActiveSpreadsheet();
-      // CHANGE THIS to match your exact sheet name if it is not "Form Responses 1"
-      const sheet = ss.getSheetByName("Form Responses 1");
+      const sheet = ss.getSheetByName(MAIN_SHEET_NAME);
 
       if (!sheet) {
         return {
           status: "error",
-          message: "Sheet 'Form Responses 1' not found",
+          message: `Sheet '${MAIN_SHEET_NAME}' not found`,
         };
       }
 
+      // 1. NAME PARSING
+      let lastName = "",
+        firstName = "",
+        middleName = "";
+      if (values.fullName) {
+        const str = values.fullName.toString();
+        if (str.includes(",")) {
+          const parts = str.split(",").map((p) => p.trim());
+          lastName = parts[0] || "";
+          firstName = parts[1] || "";
+          middleName = parts[2] || "";
+        } else {
+          const parts = str.split(" ");
+          lastName = parts.pop() || "";
+          firstName = parts.join(" ");
+        }
+      }
+
+      // 2. INTELLIGENT DATE HANDLING
+      let dateObjects = [];
+      const timeZone = Session.getScriptTimeZone();
+
+      if (values.dateTypes === "single" && values.singleDate) {
+        dateObjects.push(new Date(values.singleDate));
+      } else if (
+        values.dateTypes === "range" &&
+        values.startDate &&
+        values.endDate
+      ) {
+        let current = new Date(values.startDate);
+        let end = new Date(values.endDate);
+        while (current <= end) {
+          dateObjects.push(new Date(current));
+          current.setDate(current.getDate() + 1);
+        }
+      } else if (values.dates && values.dates.length > 0) {
+        dateObjects = values.dates.map((d) => new Date(d));
+      }
+
+      // Normalize dates (midnight) and sort
+      dateObjects = dateObjects
+        .map((d) => {
+          d.setHours(0, 0, 0, 0);
+          return d;
+        })
+        .sort((a, b) => a - b);
+
+      if (dateObjects.length === 0) {
+        return { status: "error", message: "No dates selected" };
+      }
+
+      // 3. GENERATE SMART STRINGS
+      let dateRanges = [];
+      let startGroup = dateObjects[0];
+      let endGroup = dateObjects[0];
+
+      for (let i = 1; i <= dateObjects.length; i++) {
+        const current = dateObjects[i];
+        const nextExpected = new Date(endGroup.getTime());
+        nextExpected.setDate(endGroup.getDate() + 1);
+
+        if (current && current.toDateString() === nextExpected.toDateString()) {
+          endGroup = current;
+        } else {
+          const sameMonth = startGroup.getMonth() === endGroup.getMonth();
+          if (startGroup.getTime() === endGroup.getTime()) {
+            dateRanges.push(
+              Utilities.formatDate(startGroup, timeZone, "MMM d"),
+            );
+          } else if (sameMonth) {
+            dateRanges.push(
+              `${Utilities.formatDate(startGroup, timeZone, "MMM d")}-${Utilities.formatDate(endGroup, timeZone, "d")}`,
+            );
+          } else {
+            dateRanges.push(
+              `${Utilities.formatDate(startGroup, timeZone, "MMM d")} - ${Utilities.formatDate(endGroup, timeZone, "MMM d")}`,
+            );
+          }
+          startGroup = current;
+          endGroup = current;
+        }
+      }
+      const finalOffice =
+        values.office === "Others" || !values.office
+          ? values.otherOfficesAndPostion || "Not Specified"
+          : values.office;
+
+      const smartDateString = dateRanges.join("; ");
+      const rawIsoList = dateObjects
+        .map((d) => Utilities.formatDate(d, timeZone, "yyyy-MM-dd"))
+        .join(", ");
+      const durationStr =
+        dateObjects.length +
+        (dateObjects.length === 1 ? " Working day" : " Working days");
+      var lastRow = sheet.getLastRow() + 1;
+      // 4. MAP TO COLUMNS (Matches your 21-column structure)
       const rowData = [
         new Date(),
-        values.fullName,
         values.email,
-        values.officeDepartment,
+        finalOffice,
+        lastName,
+        firstName,
+        middleName,
         values.position,
         values.salaryGrade,
         values.typeOfLeave,
-        values.vacationSpecialPrivilegeLocation || "",
+        values.vacationSpecialPrivilegeLeaveSpecifications || "",
         values.abroadSpecification || "",
         values.sickLeaveSpecification || "",
         values.inHospitalSpecification || "",
         values.outpatientSpecification || "",
         values.specialLeaveBenefitsForWomenSpecification || "",
-        values.studyLeaveSpecification || "",
+        values.studyLeaveSpecification || "", // FIXED: Matches your payload key
         values.otherSpecification || "",
         values.otherPurposeSpecification || "",
-        values.startDate,
-        values.endDate,
+        rawIsoList, // Column S
+        smartDateString, // Column T
+        durationStr, // Column U
       ];
 
       sheet.appendRow(rowData);
+      const actualRow = sheet.getLastRow();
+      SpreadsheetApp.flush();
+
+      // Pass the Row Number to your PDF Processor
+      ProcessingApplicationToPDF(actualRow);
 
       return { status: "success", message: "Form submitted successfully" };
     } catch (e) {
@@ -55,51 +163,31 @@ function saveForm(values) {
       lock.releaseLock();
     }
   } else {
-    return { status: "error", message: "Server is busy, please try again." };
+    return { status: "error", message: "Server is busy. Please try again." };
   }
 }
 
-const PDF_FOLDER_ID = "1L_EG3hJXfGwAHI7QbBihCN1aWegD1E7e";
-const LOGGING = true;
-
-function onFormSubmit(e) {
-  const lock = LockService.getScriptLock();
-  let gotLock = false;
-  try {
-    gotLock = lock.tryLock(10000);
-    if (!gotLock) {
-      Logger.log("Could not obtain script lock; aborting to avoid race.");
-      return;
-    }
-    fetchLatestFormResponse(e);
-  } catch (err) {
-    Logger.log("Error in onFormSubmit: " + err);
-  } finally {
-    if (gotLock) lock.releaseLock();
-  }
-}
-
-function fetchLatestFormResponse(e) {
+function ProcessingApplicationToPDF(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const templateSheet = ss.getSheetByName("CS_FORM_NO_6");
-  const responsesSheet = ss.getSheetByName("Form Responses 1");
-  if (!templateSheet || !responsesSheet) {
-    Logger.log("Required sheet(s) not found!");
+  const LeaveApplicationForm = ss.getSheetByName(PDF_TEMPLATE_SHEET);
+  const Applications = ss.getSheetByName(MAIN_SHEET_NAME);
+
+  if (!LeaveApplicationForm || !Applications) {
+    console.log("Not enough data to process");
     return;
   }
 
-  let formData = buildNamedValuesFromForm(ss);
-  if (Object.keys(formData).length === 0 && e && e.namedValues)
+  // Smart Data Loader
+  let formData = {};
+  if (e && e.namedValues) {
     formData = e.namedValues;
-  if (Object.keys(formData).length === 0)
-    formData = buildNamedValuesFromLastRow(responsesSheet);
-
-  const normMap = buildNormalizedMap(formData);
-  if (LOGGING) {
-    Logger.log("Available response keys: " + Object.keys(formData).join(", "));
-    Logger.log("Normalized response keys: " + Object.keys(normMap).join(", "));
+  } else {
+    formData = buildNamedValuesFromLastRow(Applications);
   }
 
+  const normMap = buildNormalizedMap(formData);
+
+  // Helper to safely get values
   function getVal(keys) {
     keys = Array.isArray(keys) ? keys : [keys];
     for (let k of keys) {
@@ -110,165 +198,282 @@ function fetchLatestFormResponse(e) {
         return v === undefined || v === null ? "" : v;
       }
     }
-    const fallbackVariants = [
-      "officedept",
-      "officedepartment",
-      "office",
-      "department",
-    ];
-    for (let v of fallbackVariants) {
-      if (normMap.hasOwnProperty(v)) {
-        let val = normMap[v];
-        if (Array.isArray(val)) val = val[0];
-        return val === undefined || val === null ? "" : val;
-      }
-    }
     return "";
   }
 
-  const lastName = getVal(["LAST NAME", "Last Name", "lastname"]);
-  templateSheet
-    .getRange("C5")
-    .setValue(
-      getVal([
-        "Office / Department",
-        "Office/Department",
-        "Office - Department",
-        "Office",
-      ]),
-    );
-  templateSheet.getRange("G5").setValue(lastName);
-  templateSheet
-    .getRange("J5")
-    .setValue(getVal(["FIRST NAME", "First Name", "firstname"]));
-  templateSheet
-    .getRange("Q5")
-    .setValue(getVal(["MIDDLE NAME", "Middle Name", "middlename"]));
-  templateSheet.getRange("H6").setValue(getVal(["Position", "Job Position"]));
-  templateSheet.getRange("Q6").setValue(getVal(["Salary", "Monthly Salary"]));
-  const dateOfFilingValue = convertDateOfFilingFormat(
-    getVal(["Date of Filing", "Date", "Timestamp"]),
-  );
-  templateSheet.getRange("F6").setNumberFormat("@").setValue(dateOfFilingValue);
+  // --- MAPPING LOGIC ---
+  const lastName = getVal(["Last Name", "LAST NAME"]);
+  const firstName = getVal(["First Name", "FIRST NAME"]);
+  const middleName = getVal(["Middle Name", "MIDDLE NAME"]);
+  const fullName = [lastName, firstName, middleName].filter(Boolean).join(" ");
 
-  const leaveRaw = getVal([
-    "TYPE OF LEAVE TO BE AVAILED OF",
-    "Type of Leave",
-    "Leave Type",
-  ]);
-  let leaveOtherText = "";
-  for (let k of [
-    "Other (please specify)",
-    "If other, please specify",
-    "Other",
-  ]) {
-    const nk = normalizeKey(k);
-    if (normMap.hasOwnProperty(nk)) {
-      let v = normMap[nk];
-      if (Array.isArray(v)) v = v[0];
-      leaveOtherText = v === undefined || v === null ? "" : v;
-      break;
+  // Basic Info
+  LeaveApplicationForm.getRange("B5").setValue(
+    getVal(["Office/Department", "Office / Department"]),
+  );
+  LeaveApplicationForm.getRange("E5").setValue(fullName);
+
+  // Date of Filing
+  LeaveApplicationForm.getRange("D6").setValue(
+    convertDateOfFilingFormat(getVal(["Timestamp", "Date"])),
+  );
+  LeaveApplicationForm.getRange("F6").setValue(getVal(["Position"]));
+
+  // Salary Grade
+  let sg = getVal(["Salary Grade"]);
+  if (sg && !sg.toString().toLowerCase().startsWith("sg")) {
+    sg = "SG" + sg;
+  }
+  LeaveApplicationForm.getRange("K6").setValue(sg);
+
+  // --- CHECKBOX LOGIC ---
+  const checkboxs = [
+    getVal(["Type of Leave to be Avail of"]),
+    getVal(["Vacation/Special Privilege Leave Specification"]),
+    getVal(["Specify if the employee is an In Hospital or Outpatient"]),
+    getVal(["Specify the reason of study leave within the option given"]),
+    getVal(["What the purpose of the employee on availing the leave"]),
+    getVal([
+      'Specify the country if you selected "Abroad" from the previous question',
+    ]),
+    getVal(["Specify which type of leave where the employee want to avail"]),
+    getVal([
+      "Please specify the nature of the illness requiring the employee's inpatient hospitalization",
+    ]),
+    getVal([
+      "Please specify the medical condition for which the employee is receiving outpatient treatment.  ",
+    ]),
+  ];
+
+  checkboxFillUp(LeaveApplicationForm, checkboxs);
+
+  // --- DATES (FIXED FOR MULTI-DATE GROUPING) ---
+
+  // 1. Get the Smart Formatted String (e.g., "February 28, 2026; April 1-3, 2026")
+  // 2. Get the Duration (e.g., "4 Working days")
+  const smartDateRange = getVal(["Inclusive Dates", "Smart Date String"]);
+  const durationStr = getVal(["Duration", "Total Duration"]);
+
+  // 3. Set values in the Template
+  if (smartDateRange) {
+    // We no longer add "to" because the string is already formatted correctly
+    LeaveApplicationForm.getRange("C48").setValue(smartDateRange);
+  }
+
+  if (durationStr) {
+    LeaveApplicationForm.getRange("C45").setValue(durationStr);
+  }
+
+  // Footer
+  LeaveApplicationForm.getRange("I48").setValue(fullName);
+
+  // Email
+  const email = getVal(["Email Address", "Email"]);
+  exportCSForm6PDF(LeaveApplicationForm, lastName || "NoLastName", email);
+}
+
+function getDate(duration, smartDateString) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("LeaveApplicationFormTemplate");
+
+  if (!sheet) {
+    Logger.log("Sheet not found");
+    return;
+  }
+
+  // Set the duration (e.g., "4 Working days")
+  sheet.getRange("C45").setValue(duration);
+
+  // Set the smart range (e.g., "February 28, 2026; April 1-3, 2026")
+  sheet.getRange("C48").setValue(smartDateString);
+
+  Logger.log("Duration updated: " + duration);
+  Logger.log("Dates updated: " + smartDateString);
+}
+
+function checkboxFillUp(sheet, inputList) {
+  const others = "B41";
+
+  const leaveType = {
+    vacationleavesec51rulexviomnibusrulesimplementingeono292: "B11",
+    mandatory: "B13",
+    sick: "B15",
+    maternity: "B17",
+    paternity: "B19",
+    privilege: "B21",
+    solo: "B23",
+    study: "B25",
+    vawc: "B27",
+    rehabilitation: "B29",
+    specialleavebenefitsforwomen: "B31",
+    specialemergency: "B33",
+    adoption: "B35",
+  };
+
+  const specifyLeave = {
+    withinthephilippines: "H13",
+    abroad: "H15",
+    inhospital: "H19",
+    outpatient: "H21",
+    completionofmasters: "H33",
+    completionofmastersdegree: "H33",
+    bar: "H35",
+    monetization: "H39",
+    monetizationofleavecredits: "H39",
+    terminalleave: "H41",
+    terminal: "H41",
+  };
+
+  const textMapping = {
+    H15: "J15",
+    H19: "J19",
+    H21: "J21",
+    B31: "J27",
+  };
+
+  const allCells = [
+    ...Object.values(leaveType),
+    ...Object.values(specifyLeave),
+  ];
+  const textCells = [...Object.values(textMapping)];
+
+  [...new Set([...allCells, ...textCells, others])].forEach((cell) =>
+    sheet.getRange(cell).clearContent(),
+  );
+  allCells.forEach((cell) => sheet.getRange(cell).setValue(false));
+
+  // 3. PROCESSING
+  const norm = (s) =>
+    (s || "")
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  const tokens = (s) =>
+    (s || "")
+      .toString()
+      .toLowerCase()
+      .match(/[a-z0-9]+/g) || [];
+
+  let activeTextCell = others;
+  const unknownParts = [];
+
+  inputList.filter(Boolean).forEach((rawInput, index) => {
+    const parts = rawInput.toString().split(/;[,\/|&\n\r]/);
+    Logger.log(`--- Processing Input #${index}: "${rawInput}" ---`);
+
+    parts.forEach((part) => {
+      const trimmed = part.trim();
+      if (!trimmed || trimmed.length < 3) return;
+
+      const nPart = norm(trimmed);
+      const tPart = new Set(tokens(trimmed));
+      Logger.log(nPart + "normalan");
+      Logger.log(tPart + "token");
+      let matched = false;
+
+      // Check against Main and Specify Maps
+      [leaveType, specifyLeave].forEach((map) => {
+        for (let key in map) {
+          const keyTokens = tokens(key);
+          if (
+            nPart === key ||
+            (keyTokens.length > 0 && keyTokens.every((t) => tPart.has(t)))
+          ) {
+            const checkboxCell = map[key];
+            sheet.getRange(checkboxCell).setValue(true);
+            matched = true;
+
+            // If this checkbox has a specific text box, prioritize it
+            if (textMapping[checkboxCell]) {
+              activeTextCell = textMapping[checkboxCell];
+            }
+          }
+        }
+      });
+
+      // 4. COLLECT LEFTOVERS (The "Specify" text)
+      const isCitation =
+        /^(sec|section|rule|ra|r\.a\.|s\.|no\.|omnibus|e\.?o\.?)/i.test(
+          trimmed,
+        );
+      if (!matched && !isCitation) {
+        unknownParts.push(trimmed);
+      }
+    });
+  });
+
+  // 5. WRITE THE TEXT
+  // 5. WRITE THE TEXT ONLY
+  if (unknownParts.length > 0) {
+    const filteredParts = unknownParts.filter((part) => {
+      const cleanPart = part.trim().toLowerCase();
+      // Ignore the words "others" or "other" themselves
+      return !["others", "other"].includes(cleanPart);
+    });
+    if (filteredParts.length > 0) {
+      // Write the text (e.g., "Bar exam") to the blank space
+      sheet.getRange(activeTextCell).setValue(filteredParts.join("; "));
+      sheet.getRange(activeTextCell).setWrap(true);
+
+      // NOTE: We are NOT calling .setValue(true) on the checkbox cell here
     }
   }
+}
 
-  const vacationLocationRaw = getVal([
-    "In case of Vacation/Special Privilege Leave",
-    "Vacation/Special Privilege Leave",
-    "Vacation Location",
-  ]);
-  const abroadReasonRaw = getVal([
-    'Specify if you selected "Abroad" on previous question',
-    "Reason for Abroad",
-    "Abroad Reason",
-  ]);
-
-  const sickLeaveTypeRaw = getVal([
-    "In case of Sick Leave",
-    "Sick Leave Type",
-    "Sick Leave",
-  ]);
-  const illnessReasonRaw = getVal([
-    "Specify the Illness",
-    "Illness",
-    "Illness Reason",
-  ]);
-
-  const womenBenefitsIllnessRaw = getVal([
-    "In case of Special Leave Benefits for Women: (Specify Illness)",
-    "Special Leave Benefits for Women Illness",
-    "Women Benefits Illness",
-  ]);
-
-  const studyLeaveTypeRaw = getVal([
-    "In case of Study Leave",
-    "Study Leave Type",
-    "Study Leave",
-  ]);
-
-  const otherPurposeRaw = getVal([
-    "Other purpose",
-    "Other Purpose",
-    "Other Purpose Type",
-  ]);
-
-  const workingDaysRaw = getVal([
-    "NUMBER OF WORKING DAYS APPLIED FOR",
-    "Number of Working Days Applied For",
-    "Working Days",
-  ]);
-
-  const inclusiveDatesRaw = getVal([
-    "INCLUSIVE DATES",
-    "Inclusive Dates",
-    "Dates",
-  ]);
-
-  applyLeaveCheckboxes(templateSheet, leaveRaw, leaveOtherText);
-  applyVacationLocationCheckboxes(
-    templateSheet,
-    vacationLocationRaw,
-    abroadReasonRaw,
-  );
-  applySickLeaveCheckboxes(templateSheet, sickLeaveTypeRaw, illnessReasonRaw);
-  applySpecialBenefitsForWomenCheckboxes(
-    templateSheet,
-    womenBenefitsIllnessRaw,
-  );
-  applyStudyLeaveCheckboxes(templateSheet, studyLeaveTypeRaw);
-  applyOtherPurposeCheckboxes(templateSheet, otherPurposeRaw);
-
-  if (workingDaysRaw && workingDaysRaw.toString().trim()) {
-    templateSheet.getRange("E45").setValue(workingDaysRaw.toString().trim());
-    if (LOGGING)
-      Logger.log("Set E45 with working days: '" + workingDaysRaw + "'");
+function buildNamedValuesFromForm(ss) {
+  try {
+    const formUrl = ss.getFormUrl();
+    if (!formUrl) return {};
+    const form = FormApp.openByUrl(formUrl);
+    const responses = form.getResponses();
+    if (!responses || responses.length === 0) return {};
+    const latest = responses[responses.length - 1];
+    const nv = {};
+    nv["Timestamp"] = [latest.getTimestamp()];
+    latest.getItemResponses().forEach((ir) => {
+      const title = ir.getItem().getTitle();
+      const resp = ir.getResponse();
+      nv[title] = Array.isArray(resp) ? [resp.join(", ")] : [resp];
+    });
+    return nv;
+  } catch (err) {
+    Logger.log("buildNamedValuesFromForm error: " + err);
+    return {};
   }
+}
 
-  if (inclusiveDatesRaw && inclusiveDatesRaw.toString().trim()) {
-    templateSheet.getRange("E48").setValue(inclusiveDatesRaw.toString().trim());
-    if (LOGGING)
-      Logger.log("Set E48 with inclusive dates: '" + inclusiveDatesRaw + "'");
+function buildNamedValuesFromLastRow(sheet) {
+  try {
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2) return {};
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    const row = sheet.getRange(lastRow, 1, 1, lastCol).getValues()[0];
+    const nv = {};
+    headers.forEach((h, i) => (nv[h] = [row[i]]));
+    return nv;
+  } catch (err) {
+    Logger.log("buildNamedValuesFromLastRow error: " + err);
+    return {};
   }
+}
 
-  // First Name, Middle Name, Last Name - N48
-  const firstName = templateSheet.getRange("J5").getValue();
-  const middleName = templateSheet.getRange("Q5").getValue();
-  const lastNameValue = templateSheet.getRange("G5").getValue();
-  const fullName = [firstName, middleName, lastNameValue]
-    .filter((v) => v && v.toString().trim())
-    .join(" ");
-  templateSheet.getRange("N48").setValue(fullName);
-  if (LOGGING) Logger.log("Set N48 with full name: '" + fullName + "'");
+function normalizeKey(k) {
+  return k
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
 
-  // Extract email from column 19 (Email Address column) - use existing responsesSheet
-  const lastRow = responsesSheet.getLastRow();
-  let email = "";
-  if (lastRow > 1) {
-    const emailValue = responsesSheet.getRange(lastRow, 19).getValue();
-    email = emailValue ? emailValue.toString().trim() : "";
+function buildNormalizedMap(formData) {
+  const norm = {};
+  for (let fk in formData) {
+    if (!fk) continue;
+    norm[normalizeKey(fk)] = formData[fk];
   }
-  if (LOGGING) Logger.log("Extracted email from column 19: '" + email + "'");
-
-  exportCSForm6PDF(templateSheet, lastName || "NoLastName", email);
+  return norm;
 }
 
 function convertDateOfFilingFormat(dateValue) {
@@ -381,725 +586,6 @@ function convertDateOfFilingFormat(dateValue) {
   }
 }
 
-function buildNamedValuesFromForm(ss) {
-  try {
-    const formUrl = ss.getFormUrl();
-    if (!formUrl) return {};
-    const form = FormApp.openByUrl(formUrl);
-    const responses = form.getResponses();
-    if (!responses || responses.length === 0) return {};
-    const latest = responses[responses.length - 1];
-    const nv = {};
-    nv["Timestamp"] = [latest.getTimestamp()];
-    latest.getItemResponses().forEach((ir) => {
-      const title = ir.getItem().getTitle();
-      const resp = ir.getResponse();
-      nv[title] = Array.isArray(resp) ? [resp.join(", ")] : [resp];
-    });
-    return nv;
-  } catch (err) {
-    Logger.log("buildNamedValuesFromForm error: " + err);
-    return {};
-  }
-}
-
-function buildNamedValuesFromLastRow(sheet) {
-  try {
-    const lastRow = sheet.getLastRow();
-    const lastCol = sheet.getLastColumn();
-    if (lastRow < 2) return {};
-    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-    const row = sheet.getRange(lastRow, 1, 1, lastCol).getValues()[0];
-    const nv = {};
-    headers.forEach((h, i) => (nv[h] = [row[i]]));
-    return nv;
-  } catch (err) {
-    Logger.log("buildNamedValuesFromLastRow error: " + err);
-    return {};
-  }
-}
-
-function normalizeKey(k) {
-  return k
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-function buildNormalizedMap(formData) {
-  const norm = {};
-  for (let fk in formData) {
-    if (!fk) continue;
-    norm[normalizeKey(fk)] = formData[fk];
-  }
-  return norm;
-}
-
-function applyVacationLocationCheckboxes(
-  sheet,
-  vacationLocation,
-  abroadReason,
-) {
-  try {
-    if (LOGGING)
-      Logger.log(
-        "applyVacationLocationCheckboxes input: " +
-          vacationLocation +
-          " | abroadReason: " +
-          abroadReason,
-      );
-
-    function setCheckboxValue(cellAddr, checked) {
-      const r = sheet.getRange(cellAddr);
-      const dv = r.getDataValidation();
-      if (
-        dv &&
-        dv.getCriteriaType &&
-        dv.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.CHECKBOX
-      ) {
-        const cvals = dv.getCriteriaValues() || [];
-        const checkedVal =
-          cvals.length > 0 && cvals[0] !== undefined && cvals[0] !== null
-            ? cvals[0]
-            : true;
-        const uncheckedVal =
-          cvals.length > 1 && cvals[1] !== undefined && cvals[1] !== null
-            ? cvals[1]
-            : false;
-        r.setValue(checked ? checkedVal : uncheckedVal);
-        if (LOGGING)
-          Logger.log(
-            `Set ${cellAddr} -> ${checked ? checkedVal : uncheckedVal} (checkbox custom)`,
-          );
-      } else {
-        r.setValue(!!checked);
-        if (LOGGING) Logger.log(`Set ${cellAddr} -> ${!!checked}`);
-      }
-    }
-
-    setCheckboxValue("J13", false);
-    setCheckboxValue("J15", false);
-    sheet.getRange("Q15").setValue("");
-
-    if (!vacationLocation) {
-      if (LOGGING)
-        Logger.log(
-          "No vacation location provided; clearing J13, J15, and Q15.",
-        );
-      return;
-    }
-
-    const normalized = vacationLocation
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
-    if (
-      normalized.indexOf("withinphilippines") !== -1 ||
-      normalized.indexOf("within") !== -1
-    ) {
-      setCheckboxValue("J13", true);
-      if (LOGGING) Logger.log("Set J13 checkbox for 'Within the Philippines'");
-    } else if (normalized.indexOf("abroad") !== -1) {
-      setCheckboxValue("J15", true);
-      if (LOGGING) Logger.log("Set J15 checkbox for 'Abroad'");
-
-      if (abroadReason && abroadReason.toString().trim()) {
-        sheet.getRange("Q15").setValue(abroadReason.toString().trim());
-        if (LOGGING)
-          Logger.log("Set Q15 with abroad reason: '" + abroadReason + "'");
-      }
-    }
-  } catch (err) {
-    Logger.log("applyVacationLocationCheckboxes error: " + err);
-  }
-}
-
-function applySickLeaveCheckboxes(sheet, sickLeaveType, illnessReason) {
-  try {
-    if (LOGGING)
-      Logger.log(
-        "applySickLeaveCheckboxes input: " +
-          sickLeaveType +
-          " | illnessReason: " +
-          illnessReason,
-      );
-
-    function setCheckboxValue(cellAddr, checked) {
-      const r = sheet.getRange(cellAddr);
-      const dv = r.getDataValidation();
-      if (
-        dv &&
-        dv.getCriteriaType &&
-        dv.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.CHECKBOX
-      ) {
-        const cvals = dv.getCriteriaValues() || [];
-        const checkedVal =
-          cvals.length > 0 && cvals[0] !== undefined && cvals[0] !== null
-            ? cvals[0]
-            : true;
-        const uncheckedVal =
-          cvals.length > 1 && cvals[1] !== undefined && cvals[1] !== null
-            ? cvals[1]
-            : false;
-        r.setValue(checked ? checkedVal : uncheckedVal);
-        if (LOGGING)
-          Logger.log(
-            `Set ${cellAddr} -> ${checked ? checkedVal : uncheckedVal} (checkbox custom)`,
-          );
-      } else {
-        r.setValue(!!checked);
-        if (LOGGING) Logger.log(`Set ${cellAddr} -> ${!!checked}`);
-      }
-    }
-
-    setCheckboxValue("J19", false);
-    setCheckboxValue("J21", false);
-    sheet.getRange("J23:Q23").setValue("");
-
-    if (!sickLeaveType) {
-      if (LOGGING)
-        Logger.log(
-          "No sick leave type provided; clearing J19, J21, and J23:Q23.",
-        );
-      return;
-    }
-
-    const normalized = sickLeaveType
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
-    if (
-      normalized.indexOf("inhospital") !== -1 ||
-      normalized.indexOf("hospital") !== -1
-    ) {
-      setCheckboxValue("J19", true);
-      if (LOGGING) Logger.log("Set J19 checkbox for 'In Hospital'");
-
-      if (illnessReason && illnessReason.toString().trim()) {
-        sheet.getRange("J23").setValue(illnessReason.toString().trim());
-        if (LOGGING)
-          Logger.log("Set J23 with illness reason: '" + illnessReason + "'");
-      }
-    } else if (normalized.indexOf("outpatient") !== -1) {
-      setCheckboxValue("J21", true);
-      if (LOGGING) Logger.log("Set J21 checkbox for 'Out Patient'");
-
-      if (illnessReason && illnessReason.toString().trim()) {
-        sheet.getRange("J23").setValue(illnessReason.toString().trim());
-        if (LOGGING)
-          Logger.log("Set J23 with illness reason: '" + illnessReason + "'");
-      }
-    }
-  } catch (err) {
-    Logger.log("applySickLeaveCheckboxes error: " + err);
-  }
-}
-
-function applySpecialBenefitsForWomenCheckboxes(sheet, womenBenefitsIllness) {
-  try {
-    if (LOGGING)
-      Logger.log(
-        "applySpecialBenefitsForWomenCheckboxes input: " + womenBenefitsIllness,
-      );
-
-    sheet.getRange("J29").setValue("");
-
-    if (!womenBenefitsIllness) {
-      if (LOGGING)
-        Logger.log("No women benefits illness provided; clearing J29.");
-      return;
-    }
-
-    if (womenBenefitsIllness && womenBenefitsIllness.toString().trim()) {
-      sheet.getRange("J29").setValue(womenBenefitsIllness.toString().trim());
-      if (LOGGING)
-        Logger.log(
-          "Set J29 with women benefits illness reason: '" +
-            womenBenefitsIllness +
-            "'",
-        );
-    }
-  } catch (err) {
-    Logger.log("applySpecialBenefitsForWomenCheckboxes error: " + err);
-  }
-}
-
-function applyStudyLeaveCheckboxes(sheet, studyLeaveType) {
-  try {
-    if (LOGGING)
-      Logger.log("applyStudyLeaveCheckboxes input: " + studyLeaveType);
-
-    function setCheckboxValue(cellAddr, checked) {
-      const r = sheet.getRange(cellAddr);
-      const dv = r.getDataValidation();
-      if (
-        dv &&
-        dv.getCriteriaType &&
-        dv.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.CHECKBOX
-      ) {
-        const cvals = dv.getCriteriaValues() || [];
-        const checkedVal =
-          cvals.length > 0 && cvals[0] !== undefined && cvals[0] !== null
-            ? cvals[0]
-            : true;
-        const uncheckedVal =
-          cvals.length > 1 && cvals[1] !== undefined && cvals[1] !== null
-            ? cvals[1]
-            : false;
-        r.setValue(checked ? checkedVal : uncheckedVal);
-        if (LOGGING)
-          Logger.log(
-            `Set ${cellAddr} -> ${checked ? checkedVal : uncheckedVal} (checkbox custom)`,
-          );
-      } else {
-        r.setValue(!!checked);
-        if (LOGGING) Logger.log(`Set ${cellAddr} -> ${!!checked}`);
-      }
-    }
-
-    setCheckboxValue("J33", false);
-    setCheckboxValue("J35", false);
-
-    if (!studyLeaveType) {
-      if (LOGGING)
-        Logger.log("No study leave type provided; clearing J33 and J35.");
-      return;
-    }
-
-    const normalized = studyLeaveType
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
-    if (
-      normalized.indexOf("completionofmasters") !== -1 ||
-      normalized.indexOf("mastersdegree") !== -1
-    ) {
-      setCheckboxValue("J33", true);
-      if (LOGGING)
-        Logger.log("Set J33 checkbox for 'Completion of Master's Degree'");
-    } else if (
-      normalized.indexOf("bar") !== -1 ||
-      normalized.indexOf("boardexamination") !== -1
-    ) {
-      setCheckboxValue("J35", true);
-      if (LOGGING)
-        Logger.log("Set J35 checkbox for 'BAR/Board Examination Review'");
-    }
-  } catch (err) {
-    Logger.log("applyStudyLeaveCheckboxes error: " + err);
-  }
-}
-
-function applyOtherPurposeCheckboxes(sheet, otherPurpose) {
-  try {
-    if (LOGGING)
-      Logger.log("applyOtherPurposeCheckboxes input: " + otherPurpose);
-
-    function setCheckboxValue(cellAddr, checked) {
-      const r = sheet.getRange(cellAddr);
-      const dv = r.getDataValidation();
-      if (
-        dv &&
-        dv.getCriteriaType &&
-        dv.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.CHECKBOX
-      ) {
-        const cvals = dv.getCriteriaValues() || [];
-        const checkedVal =
-          cvals.length > 0 && cvals[0] !== undefined && cvals[0] !== null
-            ? cvals[0]
-            : true;
-        const uncheckedVal =
-          cvals.length > 1 && cvals[1] !== undefined && cvals[1] !== null
-            ? cvals[1]
-            : false;
-        r.setValue(checked ? checkedVal : uncheckedVal);
-        if (LOGGING)
-          Logger.log(
-            `Set ${cellAddr} -> ${checked ? checkedVal : uncheckedVal} (checkbox custom)`,
-          );
-      } else {
-        r.setValue(!!checked);
-        if (LOGGING) Logger.log(`Set ${cellAddr} -> ${!!checked}`);
-      }
-    }
-
-    setCheckboxValue("J39", false);
-    setCheckboxValue("J41", false);
-
-    if (!otherPurpose) {
-      if (LOGGING)
-        Logger.log("No other purpose provided; clearing J39 and J41.");
-      return;
-    }
-
-    const normalized = otherPurpose
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
-    if (
-      normalized.indexOf("monetization") !== -1 ||
-      normalized.indexOf("leavecredits") !== -1
-    ) {
-      setCheckboxValue("J39", true);
-      if (LOGGING)
-        Logger.log("Set J39 checkbox for 'Monetization of Leave Credits'");
-    } else if (normalized.indexOf("terminal") !== -1) {
-      setCheckboxValue("J41", true);
-      if (LOGGING) Logger.log("Set J41 checkbox for 'Terminal Leave'");
-    }
-  } catch (err) {
-    Logger.log("applyOtherPurposeCheckboxes error: " + err);
-  }
-}
-
-function applyLeaveCheckboxes(sheet, leaveRaw, otherText) {
-  try {
-    const reasonRange = "E41:F41";
-
-    const leaveToCell = {
-      vacation: "D11",
-      vacationleave: "D11",
-      mandatory: "D13",
-      forced: "D13",
-      mandatoryforced: "D13",
-      sick: "D15",
-      sickleave: "D15",
-      maternity: "D17",
-      paternity: "D19",
-      specialprivilege: "D21",
-      specialprivilegeleave: "D21",
-      soloparent: "D23",
-      soloparentleave: "D23",
-      study: "D25",
-      studyleave: "D25",
-      vawc: "D27",
-      tendayvawc: "D27",
-      rehabilitation: "D29",
-      specialbenefitsforwomen: "D31",
-      specialleavebenefitsforwomen: "D31",
-      specialemergency: "D33",
-      calamity: "D33",
-      adoption: "D35",
-      adoptionleave: "D35",
-    };
-
-    const subOptionToCell = {
-      withinphilippines: "J13",
-      abroad: "J15",
-      inhospital: "J19",
-      outpatient: "J21",
-      completionofmasters: "J33",
-      completionofmastersdegree: "J33",
-      bar: "J35",
-      barreview: "J35",
-      boardexamination: "J35",
-      monetization: "J39",
-      monetizationofleavecredits: "J39",
-      terminalleave: "J41",
-      terminal: "J41",
-    };
-
-    function setCheckboxValue(cellAddr, checked) {
-      const r = sheet.getRange(cellAddr);
-      const dv = r.getDataValidation();
-      if (
-        dv &&
-        dv.getCriteriaType &&
-        dv.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.CHECKBOX
-      ) {
-        const cvals = dv.getCriteriaValues() || [];
-        const checkedVal =
-          cvals.length > 0 && cvals[0] !== undefined && cvals[0] !== null
-            ? cvals[0]
-            : true;
-        const uncheckedVal =
-          cvals.length > 1 && cvals[1] !== undefined && cvals[1] !== null
-            ? cvals[1]
-            : false;
-        r.setValue(checked ? checkedVal : uncheckedVal);
-        if (LOGGING)
-          Logger.log(
-            `Set ${cellAddr} -> ${checked ? checkedVal : uncheckedVal} (checkbox custom)`,
-          );
-      } else {
-        r.setValue(!!checked);
-        if (LOGGING) Logger.log(`Set ${cellAddr} -> ${!!checked}`);
-      }
-    }
-
-    function splitTopLevel(s) {
-      const res = [];
-      let cur = "",
-        depth = 0;
-      for (let i = 0; i < s.length; i++) {
-        const ch = s[i];
-        if (ch === "(") {
-          depth++;
-          cur += ch;
-          continue;
-        }
-        if (ch === ")") {
-          if (depth > 0) depth--;
-          cur += ch;
-          continue;
-        }
-        if (
-          depth === 0 &&
-          (ch === "," ||
-            ch === ";" ||
-            ch === "/" ||
-            ch === "|" ||
-            ch === "&" ||
-            ch === "\n" ||
-            ch === "\r")
-        ) {
-          if (cur.trim()) res.push(cur.trim());
-          cur = "";
-          continue;
-        }
-        cur += ch;
-      }
-      if (cur.trim()) res.push(cur.trim());
-      const final = [];
-      res.forEach((part) => {
-        const normalized = part.replace(/\s+/g, " ");
-        const tokens = normalized.split(/\s+and\s+/i);
-        tokens.forEach((t) => {
-          if (t && t.trim()) final.push(t.trim());
-        });
-      });
-      return final;
-    }
-
-    function isCitationOrNoise(s) {
-      if (!s || !s.trim()) return true;
-      const v = s.trim();
-      if (v.length < 3) return true;
-      if (
-        /^(sec|section|rule|ra|r\.a\.|s\.|no\.|omnibus|implementing|e\.?o\.?|\(|\))/i.test(
-          v,
-        )
-      )
-        return true;
-      if (/^(rule\s*\d+|sec\.?\s*\d+)/i.test(v)) return true;
-      if (/^[\d\.\-\/\s]+$/.test(v)) return true;
-      return false;
-    }
-
-    const allCells = Array.from(
-      new Set([
-        ...Object.values(leaveToCell),
-        ...Object.values(subOptionToCell),
-      ]),
-    );
-    allCells.forEach((cell) => setCheckboxValue(cell, false));
-    sheet.getRange(reasonRange).setValue("");
-
-    if (!leaveRaw) {
-      if (LOGGING)
-        Logger.log("No leave type provided; all leave checkboxes cleared.");
-      if (otherText && otherText.toString().trim()) {
-        sheet.getRange(reasonRange).setValue(otherText.toString().trim());
-        if (LOGGING)
-          Logger.log(
-            "Wrote Other (separate field) to " +
-              reasonRange +
-              ": '" +
-              otherText +
-              "'",
-          );
-      }
-      return;
-    }
-
-    if (LOGGING)
-      Logger.log(
-        "applyLeaveCheckboxes input: " +
-          leaveRaw +
-          " | otherText: " +
-          otherText,
-      );
-
-    const rawParts = splitTopLevel(leaveRaw.toString());
-    if (rawParts.length === 0) rawParts.push(leaveRaw.toString());
-    if (LOGGING)
-      Logger.log("Split parts (top-level): " + JSON.stringify(rawParts));
-
-    function norm(s) {
-      return (s || "")
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-    }
-    function tokens(s) {
-      return (
-        (s || "")
-          .toString()
-          .toLowerCase()
-          .match(/[a-z0-9]+/g) || []
-      );
-    }
-
-    const keyTokenSets = {};
-    for (let k in leaveToCell) keyTokenSets[k] = new Set(tokens(k));
-    const subKeyTokenSets = {};
-    for (let k in subOptionToCell) subKeyTokenSets[k] = new Set(tokens(k));
-
-    const unknownParts = [];
-    let otherSelectedNoDetail = false;
-
-    rawParts.forEach((part) => {
-      const trimmed = (part || "").toString().trim();
-      const otherMatch = trimmed.match(
-        /^\s*others?\s*(?:\(\s*please\s*specify\s*\))?\s*[:\-–—]?\s*(.*)$/i,
-      );
-      if (otherMatch) {
-        let captured = (otherMatch[1] || "").trim();
-        if (!captured && otherText && otherText.toString().trim())
-          captured = otherText.toString().trim();
-        if (captured) {
-          unknownParts.push(captured);
-          if (LOGGING) Logger.log("Captured Other reason: '" + captured + "'");
-        } else {
-          otherSelectedNoDetail = true;
-          if (LOGGING)
-            Logger.log(
-              "Other selected but no detail supplied for part: '" +
-                trimmed +
-                "'",
-            );
-        }
-      }
-
-      const nPart = norm(part);
-      const tPart = new Set(tokens(part));
-      if (LOGGING)
-        Logger.log(
-          `Part='${part}' norm='${nPart}' tokens=${JSON.stringify(Array.from(tPart))}`,
-        );
-
-      let matched = false;
-      if (nPart && leaveToCell[nPart]) {
-        setCheckboxValue(leaveToCell[nPart], true);
-        matched = true;
-      }
-      if (!matched) {
-        for (let key in leaveToCell) {
-          const keySet = keyTokenSets[key];
-          const keyInPart = [...keySet].every((tok) => tPart.has(tok));
-          const partInKey = [...tPart].every((tok) => keySet.has(tok));
-          if (keyInPart || partInKey) {
-            setCheckboxValue(leaveToCell[key], true);
-            matched = true;
-            break;
-          }
-        }
-      }
-      if (!matched) {
-        for (let key in leaveToCell) {
-          if (
-            nPart &&
-            (nPart.indexOf(key) !== -1 || key.indexOf(nPart) !== -1)
-          ) {
-            setCheckboxValue(leaveToCell[key], true);
-            matched = true;
-            break;
-          }
-        }
-      }
-
-      let subMatched = false;
-      if (!subMatched && nPart && subOptionToCell[nPart]) {
-        setCheckboxValue(subOptionToCell[nPart], true);
-        subMatched = true;
-      }
-      if (!subMatched) {
-        for (let key in subOptionToCell) {
-          const keySet = subKeyTokenSets[key];
-          const keyInPart = [...keySet].every((tok) => tPart.has(tok));
-          const partInKey = [...tPart].every((tok) => keySet.has(tok));
-          if (keyInPart || partInKey) {
-            setCheckboxValue(subOptionToCell[key], true);
-            subMatched = true;
-            break;
-          }
-        }
-      }
-      if (!subMatched) {
-        for (let key in subOptionToCell) {
-          if (
-            nPart &&
-            (nPart.indexOf(key) !== -1 || key.indexOf(nPart) !== -1)
-          ) {
-            setCheckboxValue(subOptionToCell[key], true);
-            subMatched = true;
-            break;
-          }
-        }
-      }
-
-      if (!matched && !subMatched && trimmed) {
-        if (!isCitationOrNoise(trimmed)) {
-          unknownParts.push(trimmed);
-          if (LOGGING)
-            Logger.log("Treating unmatched part as reason: '" + trimmed + "'");
-        } else if (LOGGING) {
-          Logger.log("Ignored citation/noise fragment: '" + trimmed + "'");
-        }
-      }
-    });
-
-    if (otherText && otherText.toString().trim()) {
-      const t = otherText.toString().trim();
-      if (!unknownParts.includes(t)) unknownParts.push(t);
-    }
-
-    if (unknownParts.length > 0) {
-      const reasonText = unknownParts.join("; ");
-      sheet.getRange(reasonRange).setValue(reasonText);
-      if (LOGGING)
-        Logger.log(
-          "Wrote reason(s) to " + reasonRange + ": '" + reasonText + "'",
-        );
-    } else {
-      sheet.getRange(reasonRange).setValue("");
-      if (otherSelectedNoDetail && LOGGING)
-        Logger.log(
-          "Other selected but no details supplied; left " +
-            reasonRange +
-            " blank",
-        );
-    }
-  } catch (err) {
-    Logger.log("applyLeaveCheckboxes error: " + err);
-  }
-}
-
-function fetchWithRetry(url, opts, maxAttempts = 4) {
-  let attempt = 0;
-  while (++attempt <= maxAttempts) {
-    try {
-      const res = UrlFetchApp.fetch(url, opts);
-      const code = res.getResponseCode ? res.getResponseCode() : 200;
-      if (code >= 200 && code < 300) return res;
-      throw new Error("HTTP " + code);
-    } catch (err) {
-      if (attempt === maxAttempts) throw err;
-      Utilities.sleep(500 * Math.pow(2, attempt));
-    }
-  }
-}
-
 function exportCSForm6PDF(sheet, baseName, email) {
   try {
     const timestamp = Utilities.formatDate(
@@ -1123,7 +609,7 @@ function exportCSForm6PDF(sheet, baseName, email) {
     const dataRange = copied.getDataRange();
     const lastCol = dataRange.getLastColumn();
     try {
-      copied.setPrintArea(copied.getRange("A1:R60"));
+      //copied.setPrintArea(copied.getRange("A1:R60"));
       copied
         .getRange(
           1,
@@ -1142,9 +628,10 @@ function exportCSForm6PDF(sheet, baseName, email) {
       "https://docs.google.com/spreadsheets/d/" +
       temp.getId() +
       "/export?format=pdf" +
-      "&size=A4" + // A4 is standard for government forms
-      "&portrait=true" + // Keep vertical
-      "&scale=4" + // 4 = Fit to Page (Essential!)
+      "&size=A4" +
+      "&portrait=true" +
+      "&scale=2" + // Change scale to 2 (Width)
+      "&fitw=true" + // Specifically set Fit to Width to true
       "&top_margin=0.25" +
       "&bottom_margin=0.25" +
       "&left_margin=0.25" +
@@ -1153,7 +640,7 @@ function exportCSForm6PDF(sheet, baseName, email) {
       "&printtitle=false" +
       "&pagenumbers=false" +
       "&gridlines=false" +
-      "&fzr=false" + // Don't repeat frozen rows
+      "&fzr=false" +
       "&gid=" +
       gid;
     const token = ScriptApp.getOAuthToken();
@@ -1176,7 +663,7 @@ function exportCSForm6PDF(sheet, baseName, email) {
           emailStr,
           "CS Form No. 6 - " + baseName,
           "Dear Employee,\n\n" +
-            "Please be informed that your CS Form No. 6 (Application for Leave) has been successfully processed. " +
+            "Please be informed that your CS Form No. 6 (Application for Leave) has been successfully generated. " +
             "A copy of the completed form, based on your submitted responses, is attached for your reference.\n\n" +
             "For any questions or clarifications, please contact the Human Resources Department during office hours.\n\n" +
             "Thank you.\n\n" +
@@ -1202,85 +689,17 @@ function exportCSForm6PDF(sheet, baseName, email) {
     Logger.log("Error generating PDF: " + err);
   }
 }
-
-function testApplyLeaveCheckboxes() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet =
-    ss.getSheetByName("CS_FORM_NO_6") || ss.insertSheet("CS_FORM_NO_6");
-  const addresses = [
-    "D11",
-    "D13",
-    "D15",
-    "D17",
-    "D19",
-    "D21",
-    "D23",
-    "D25",
-    "D27",
-    "D29",
-    "D31",
-    "D33",
-    "D35",
-    "J13",
-    "J15",
-    "J19",
-    "J21",
-    "J33",
-    "J35",
-    "J39",
-    "J41",
-    "E41",
-    "F41",
-  ];
-  [
-    "D11",
-    "D13",
-    "D15",
-    "D17",
-    "D19",
-    "D21",
-    "D23",
-    "D25",
-    "D27",
-    "D29",
-    "D31",
-    "D33",
-    "D35",
-    "J13",
-    "J15",
-    "J19",
-    "J21",
-    "J33",
-    "J35",
-    "J39",
-    "J41",
-  ].forEach((a) => {
-    sheet
-      .getRange(a)
-      .setDataValidation(
-        SpreadsheetApp.newDataValidation().requireCheckbox().build(),
-      );
-  });
-
-  const tests = [
-    {
-      input:
-        "Vacation Leave (Sec. 51, Rule XVI, Omnibus Rules Implementing E.O. No. 292)",
-      other: "",
-    },
-    { input: "Vacation Leave; Within the Philippines", other: "" },
-    { input: "Sick Leave; In Hospital (Pneumonia)", other: "" },
-    { input: "Study Leave; Completion of Master's Degree", other: "" },
-    { input: "Other: Compassionate leave due to emergency", other: "" },
-    { input: "Other:", other: "" },
-    { input: "Compassionate leave (no 'Other' word)", other: "" },
-  ];
-
-  tests.forEach((t) => {
-    applyLeaveCheckboxes(sheet, t.input, t.other);
-    const out = {};
-    addresses.forEach((a) => (out[a] = sheet.getRange(a).getValue()));
-    Logger.log("Input: '" + t.input + "' => " + JSON.stringify(out));
-    applyLeaveCheckboxes(sheet, "", "");
-  });
+function fetchWithRetry(url, opts, maxAttempts = 4) {
+  let attempt = 0;
+  while (++attempt <= maxAttempts) {
+    try {
+      const res = UrlFetchApp.fetch(url, opts);
+      const code = res.getResponseCode ? res.getResponseCode() : 200;
+      if (code >= 200 && code < 300) return res;
+      throw new Error("HTTP " + code);
+    } catch (err) {
+      if (attempt === maxAttempts) throw err;
+      Utilities.sleep(500 * Math.pow(2, attempt));
+    }
+  }
 }
