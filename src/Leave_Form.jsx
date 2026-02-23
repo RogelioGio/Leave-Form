@@ -337,6 +337,12 @@ export default function Leave_Form({ setSubmitted }) {
         then: (schema) => schema.min(1, "Select at least one date"),
         otherwise: (schema) => schema.notRequired(),
       }),
+      singleDate: Yup.date().when("dateTypes", {
+        is: "single",
+        then: (schema) => schema.required("Required to select date"),
+        otherwise: (schema) => schema.notRequired(),
+      }),
+      authorizedPersonnel: Yup.string().required("Authorized Personnel is required").max(100, "Must be at most 100 characters").matches(/^[a-zA-Z\s.,]+$/, "Authorized Personnel can only contain letters, spaces, and commas"),
     }),
   ];
 
@@ -369,6 +375,7 @@ export default function Leave_Form({ setSubmitted }) {
       startDate: null,
       endDate: null,
       dates: [], // stagger dates from now on
+      authorizedPersonnel: "",
     },
     validationSchema: validationSchema[stage],
     onSubmit: async (values) => {
@@ -1217,7 +1224,6 @@ export default function Leave_Form({ setSubmitted }) {
                     Duration of Leave
                   </h1>
                   <p className="text-sm text-gray-500">
-                    {" "}
                     The total length of time an employee is away from work,
                     typically defined by specific start and end dates.
                   </p>
@@ -1499,6 +1505,49 @@ export default function Leave_Form({ setSubmitted }) {
                     </div>
                   </>
                 )}
+              </div>
+              <div className="mt-5 space-y-4">
+                <div>
+                  <h1 className="text-lg font-medium text-gray-700">
+                    Authorized Personnel
+                  </h1>
+                  <p className="text-sm text-gray-500">
+                    Input the authorized personnel who will approve the leave application. This is usually the immediate supervisor or department head of the employee.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex justify-between gap-2">
+                    <label
+                      className="font-text block text-sm font-medium text-gray-700 text-left mb-2"
+                      htmlFor="authorizedPersonnel"
+                    >
+                      Authorized Personnel
+                    </label>
+                    <p className="text-sm text-gray-500">Required</p>
+                  </div>  
+                  <input
+                    className="border text-black border-gray-300 rounded-md p-2 w-full "
+                    id="authorizedPersonnel"
+                    name="authorizedPersonnel"
+                    type="text"
+                    placeholder="Enter authorized personnel"
+                     onChange={(e) => {
+                    const onlyLetters = e.target.value.replace(
+                      /[^a-zA-Z\s.,\-]/g,
+                      "",
+                    );
+                    formik.setFieldValue("authorizedPersonnel", onlyLetters);
+                  }}
+                      
+                    value={formik.values.authorizedPersonnel}
+                  />
+                  {formik.touched.authorizedPersonnel && formik.errors.authorizedPersonnel ? (
+                    <p className="text-sm text-red-600">
+                      {formik.errors.authorizedPersonnel}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </>
           ) : null}
