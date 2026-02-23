@@ -1459,13 +1459,7 @@ export default function Leave_Form({ setSubmitted }) {
                           </PopoverTrigger>
                           <PopoverContent className={"p-0 w-fit"}>
                             <Calendar
-                              mode={
-                                formik.values.dateTypes === "single"
-                                  ? "single"
-                                  : formik.values.dateTypes === "range"
-                                    ? "range"
-                                    : "multiple"
-                              }
+                              mode= "multiple"
                               numberOfMonths={2}
                               defaultMonth={new Date()}
                               disabled={(currentDate) => {
@@ -1483,13 +1477,15 @@ export default function Leave_Form({ setSubmitted }) {
                               }
                               onSelect={(date) => {
                                 const selectedDate = date || null;
-                                formik.setFieldValue(
-                                  "singleDate",
-                                  selectedDate,
-                                );
-                                // Synchronize with the main start/end fields so validation passes
-                                formik.setFieldValue("startDate", selectedDate);
-                                formik.setFieldValue("endDate", selectedDate);
+                                console.log(selectedDate);
+                                formik.setFieldValue("dates", selectedDate);
+                                // formik.setFieldValue(
+                                //   "singleDate",
+                                //   selectedDate,
+                                // );
+                                // // Synchronize with the main start/end fields so validation passes
+                                // formik.setFieldValue("startDate", selectedDate);
+                                // formik.setFieldValue("endDate", selectedDate);
                               }}
                               className="rounded-lg border"
                               captionLayout="dropdown"
@@ -1532,15 +1528,14 @@ export default function Leave_Form({ setSubmitted }) {
                     name="authorizedPersonnel"
                     type="text"
                     placeholder="Enter authorized personnel"
-                     onChange={(e) => {
+                    onChange={(e) => {
                     const onlyLetters = e.target.value.replace(
                       /[^a-zA-Z\s.,\-]/g,
                       "",
                     );
                     formik.setFieldValue("authorizedPersonnel", onlyLetters);
                   }}
-                      
-                    value={formik.values.authorizedPersonnel}
+                  value={formik.values.authorizedPersonnel}
                   />
                   {formik.touched.authorizedPersonnel && formik.errors.authorizedPersonnel ? (
                     <p className="text-sm text-red-600">
