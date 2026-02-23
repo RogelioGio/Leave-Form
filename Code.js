@@ -47,6 +47,31 @@ function saveForm(values) {
         }
       }
 
+      let lastNameAuth = "",
+        firstNameAuth = "",
+        middleNameAuth = "";
+
+      if (values.authorizePersonel && values.fullNameAuthorize) {
+        const str = values.fullNameAuthorize.toString().trim();
+
+        if (str.includes(",")) {
+          // Format: "Last, First, Middle"
+          const parts = str.split(",").map((p) => p.trim());
+          lastNameAuth = parts[0] || "";
+          firstNameAuth = parts[1] || "";
+          middleNameAuth = parts[2] || "";
+        } else {
+          // Format: "First Middle Last"
+          const parts = str.split(/\s+/); // Splits by any whitespace
+          if (parts.length > 1) {
+            lastNameAuth = parts.pop() || "";
+            firstNameAuth = parts.join(" ");
+          } else {
+            firstNameAuth = parts[0] || ""; // Handle single names
+          }
+        }
+      }
+
       // 2. INTELLIGENT DATE HANDLING
       let dateObjects = [];
       const timeZone = Session.getScriptTimeZone();
@@ -126,35 +151,48 @@ function saveForm(values) {
       var lastRow = sheet.getLastRow() + 1;
       // 4. MAP TO COLUMNS (Matches your 21-column structure)
       const rowData = [
-        new Date(),
-        values.email,
-        finalOffice,
-        lastName,
-        firstName,
-        middleName,
-        values.position,
-        values.salaryGrade,
-        values.typeOfLeave,
+        new Date(), // Col A: Timestamp
+        values.email, // Col B
+        finalOffice, // Col C
+        lastName, // Col D: Applicant Last Name
+        firstName, // Col E: Applicant First Name
+        middleName, // Col F: Applicant Middle Name
+        values.position, // Col G
+        values.salaryGrade, // Col H
+        values.typeOfLeave, // Col I
         values.vacationSpecialPrivilegeLeaveSpecifications || "",
         values.abroadSpecification || "",
         values.sickLeaveSpecification || "",
         values.inHospitalSpecification || "",
         values.outpatientSpecification || "",
         values.specialLeaveBenefitsForWomenSpecification || "",
-        values.studyLeaveSpecification || "", // FIXED: Matches your payload key
+        values.studyLeaveSpecification || "",
         values.otherSpecification || "",
         values.otherPurposeSpecification || "",
-        rawIsoList, // Column S
-        smartDateString, // Column T
-        durationStr, // Column U
+        rawIsoList, // Col S
+        smartDateString, // Col T
+        durationStr, // Col U
+        lastNameAuth, // Col W: Auth Last Name
+        firstNameAuth, // Col X: Auth First Name
+        middleNameAuth, // Col Y: Auth Middle Name
       ];
 
       sheet.appendRow(rowData);
       const actualRow = sheet.getLastRow();
       SpreadsheetApp.flush();
 
-      // Pass the Row Number to your PDF Processor
-      ProcessingApplicationToPDF(actualRow);
+      const pdfData = {
+        row: actualRow,
+        applicant: { firstName, lastName, middleName, email: values.email },
+        auth: {
+          firstName: firstNameAuth,
+          lastName: lastNameAuth,
+          middleName: middleNameAuth,
+        },
+      };
+
+      // Call the function directly
+      ProcessingApplicationToPDF(pdfData);
 
       return { status: "success", message: "Form submitted successfully" };
     } catch (e) {
@@ -167,10 +205,12 @@ function saveForm(values) {
   }
 }
 
-function ProcessingApplicationToPDF(e) {
+function ProcessingApplicationToPDF(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const LeaveApplicationForm = ss.getSheetByName(PDF_TEMPLATE_SHEET);
   const Applications = ss.getSheetByName(MAIN_SHEET_NAME);
+  const applicant = data.applicant;
+  const auth = data.auth;
 
   if (!LeaveApplicationForm || !Applications) {
     console.log("Not enough data to process");
@@ -178,12 +218,7 @@ function ProcessingApplicationToPDF(e) {
   }
 
   // Smart Data Loader
-  let formData = {};
-  if (e && e.namedValues) {
-    formData = e.namedValues;
-  } else {
-    formData = buildNamedValuesFromLastRow(Applications);
-  }
+  let formData = buildNamedValuesFromLastRow(Applications);
 
   const normMap = buildNormalizedMap(formData);
 
@@ -201,11 +236,17 @@ function ProcessingApplicationToPDF(e) {
     return "";
   }
 
-  // --- MAPPING LOGIC ---
-  const lastName = getVal(["Last Name", "LAST NAME"]);
-  const firstName = getVal(["First Name", "FIRST NAME"]);
-  const middleName = getVal(["Middle Name", "MIDDLE NAME"]);
-  const fullName = [lastName, firstName, middleName].filter(Boolean).join(" ");
+  const fullName = [
+    applicant.firstName,
+    applicant.middleName,
+    applicant.lastName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const fullNameAuth = [auth.firstName, auth.middleName, auth.lastName]
+    .filter(Boolean)
+    .join(" ");
 
   // Basic Info
   LeaveApplicationForm.getRange("B5").setValue(
@@ -266,10 +307,10 @@ function ProcessingApplicationToPDF(e) {
 
   // Footer
   LeaveApplicationForm.getRange("I48").setValue(fullName);
+  LeaveApplicationForm.getRange("I59").setValue(fullNameAuth);
 
-  // Email
-  const email = getVal(["Email Address", "Email"]);
-  exportCSForm6PDF(LeaveApplicationForm, lastName || "NoLastName", email);
+  const folderBaseName = `${applicant.lastName}, ${applicant.firstName}`;
+  exportCSForm6PDF(LeaveApplicationForm, folderBaseName, applicant.email);
 }
 
 function getDate(duration, smartDateString) {
@@ -607,9 +648,7 @@ function exportCSForm6PDF(sheet, baseName, email) {
     });
 
     const dataRange = copied.getDataRange();
-    const lastCol = dataRange.getLastColumn();
     try {
-      //copied.setPrintArea(copied.getRange("A1:R60"));
       copied
         .getRange(
           1,
@@ -618,73 +657,57 @@ function exportCSForm6PDF(sheet, baseName, email) {
           Math.max(1, dataRange.getNumColumns()),
         )
         .setFontSize(11);
-      // copied.autoResizeColumns(1, Math.min(lastCol, 15));
     } catch (e) {
-      if (LOGGING) Logger.log("Non-fatal layout tweak failed: " + e);
+      if (LOGGING) Logger.log("Layout tweak failed: " + e);
     }
 
     const gid = copied.getSheetId();
     const url =
       "https://docs.google.com/spreadsheets/d/" +
       temp.getId() +
-      "/export?format=pdf" +
-      "&size=A4" +
-      "&portrait=true" +
-      "&scale=2" + // Change scale to 2 (Width)
-      "&fitw=true" + // Specifically set Fit to Width to true
-      "&top_margin=0.25" +
-      "&bottom_margin=0.25" +
-      "&left_margin=0.25" +
-      "&right_margin=0.25" +
-      "&sheetnames=false" +
-      "&printtitle=false" +
-      "&pagenumbers=false" +
-      "&gridlines=false" +
-      "&fzr=false" +
-      "&gid=" +
+      "/export?format=pdf&size=A4&portrait=true&scale=2&fitw=true&top_margin=0.25&bottom_margin=0.25&left_margin=0.25&right_margin=0.25&sheetnames=false&printtitle=false&pagenumbers=false&gridlines=false&fzr=false&gid=" +
       gid;
+
     const token = ScriptApp.getOAuthToken();
     const response = fetchWithRetry(url, {
       headers: { Authorization: "Bearer " + token },
     });
     const blob = response.getBlob().setName(filename);
 
-    // PDF to Google Drive
-    DriveApp.getFolderById(PDF_FOLDER_ID).createFile(blob);
-    if (LOGGING) Logger.log("✓ PDF saved to Drive: " + filename);
+    // --- SMART FOLDER ORGANIZATION ---
+    const rootFolder = DriveApp.getFolderById(PDF_FOLDER_ID);
+    const folderSearch = rootFolder.getFoldersByName(baseName);
+    let targetFolder;
 
-    // Email with PDF attachment
+    if (folderSearch.hasNext()) {
+      targetFolder = folderSearch.next();
+    } else {
+      targetFolder = rootFolder.createFolder(baseName);
+      if (LOGGING) Logger.log(" Created new folder for: " + baseName);
+    }
+
+    targetFolder.createFile(blob);
+    // ---------------------------------
+
+    if (LOGGING)
+      Logger.log("✓ PDF saved to folder [" + baseName + "]: " + filename);
+
+    // Email Logic
     const emailStr = email ? email.toString().trim() : "";
-    if (LOGGING) Logger.log("Email to send to: '" + emailStr + "'");
-
-    if (emailStr && emailStr.length > 0 && emailStr.indexOf("@") !== -1) {
+    if (emailStr && emailStr.includes("@")) {
       try {
         GmailApp.sendEmail(
           emailStr,
           "CS Form No. 6 - " + baseName,
-          "Dear Employee,\n\n" +
-            "Please be informed that your CS Form No. 6 (Application for Leave) has been successfully generated. " +
-            "A copy of the completed form, based on your submitted responses, is attached for your reference.\n\n" +
-            "For any questions or clarifications, please contact the Human Resources Department during office hours.\n\n" +
-            "Thank you.\n\n" +
-            "Respectfully,\n" +
-            "Human Resources Department",
+          "Dear Employee,\n\nPlease find your generated Leave Application form attached.\n\nThank you.",
           { attachments: [blob] },
         );
-        if (LOGGING) Logger.log("✓ PDF emailed successfully to: " + emailStr);
-      } catch (emailErr) {
-        Logger.log("✗ Error sending email to " + emailStr + ": " + emailErr);
+      } catch (err) {
+        Logger.log("Email failed: " + err);
       }
-    } else {
-      Logger.log(
-        "⚠ No valid email provided or invalid format. Email value: '" +
-          emailStr +
-          "'",
-      );
     }
 
     DriveApp.getFileById(temp.getId()).setTrashed(true);
-    if (LOGGING) Logger.log("Temporary spreadsheet cleaned up.");
   } catch (err) {
     Logger.log("Error generating PDF: " + err);
   }
