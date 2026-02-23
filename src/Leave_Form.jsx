@@ -342,7 +342,13 @@ export default function Leave_Form({ setSubmitted }) {
         then: (schema) => schema.required("Required to select date"),
         otherwise: (schema) => schema.notRequired(),
       }),
-      authorizedPersonnel: Yup.string().required("Authorized Personnel is required").max(100, "Must be at most 100 characters").matches(/^[a-zA-Z\s.,]+$/, "Authorized Personnel can only contain letters, spaces, and commas"),
+      authorizedPersonnel: Yup.string()
+        .required("Authorized Personnel is required")
+        .max(50, "Must be at most 100 characters")
+        .matches(
+          /^[a-zA-Z\s.,]+$/,
+          "Authorized Personnel can only contain letters, spaces, and commas",
+        ),
     }),
   ];
 
@@ -1512,7 +1518,9 @@ export default function Leave_Form({ setSubmitted }) {
                     Authorized Personnel
                   </h1>
                   <p className="text-sm text-gray-500">
-                    Input the authorized personnel who will approve the leave application. This is usually the immediate supervisor or department head of the employee.
+                    Input the authorized personnel who will approve the leave
+                    application. This is usually the immediate supervisor or
+                    department head of the employee.
                   </p>
                 </div>
 
@@ -1525,24 +1533,25 @@ export default function Leave_Form({ setSubmitted }) {
                       Authorized Personnel
                     </label>
                     <p className="text-sm text-gray-500">Required</p>
-                  </div>  
+                  </div>
                   <input
                     className="border text-black border-gray-300 rounded-md p-2 w-full "
                     id="authorizedPersonnel"
                     name="authorizedPersonnel"
                     type="text"
-                    placeholder="Enter authorized personnel"
-                     onChange={(e) => {
-                    const onlyLetters = e.target.value.replace(
-                      /[^a-zA-Z\s.,\-]/g,
-                      "",
-                    );
-                    formik.setFieldValue("authorizedPersonnel", onlyLetters);
-                  }}
-                      
+                    placeholder="Last Name, First Name, Middle Name"
+                    maxLength="50"
+                    onChange={(e) => {
+                      const onlyLetters = e.target.value.replace(
+                        /[^a-zA-Z\s.,\-]/g,
+                        "",
+                      );
+                      formik.setFieldValue("authorizedPersonnel", onlyLetters);
+                    }}
                     value={formik.values.authorizedPersonnel}
                   />
-                  {formik.touched.authorizedPersonnel && formik.errors.authorizedPersonnel ? (
+                  {formik.touched.authorizedPersonnel &&
+                  formik.errors.authorizedPersonnel ? (
                     <p className="text-sm text-red-600">
                       {formik.errors.authorizedPersonnel}
                     </p>
