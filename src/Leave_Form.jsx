@@ -112,7 +112,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(2);
+  const [stage, setStage] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -385,7 +385,7 @@ export default function Leave_Form({ setSubmitted }) {
     },
     validationSchema: validationSchema[stage],
     onSubmit: async (values) => {
-      // 1. Calculate the list of dates based on selection type
+      `// 1. Calculate the list of dates based on selection type`
       let dateList = [];
 
       if (values.dateTypes === "single" && values.singleDate) {
@@ -429,17 +429,9 @@ export default function Leave_Form({ setSubmitted }) {
 
       // 4. Send to Google Apps Script
       if (window.google && window.google.script) {
-        const TIMEOUT_DURATION = 15000; // 15 seconds safeguard
-
         const googleScriptPromise = new Promise((resolve, reject) => {
-          // --> ADDED: Timeout timer
-          const timeoutId = setTimeout(() => {
-            reject("Request timed out. The server took too long to respond.");
-          }, TIMEOUT_DURATION);
-
           window.google.script.run
             .withSuccessHandler((response) => {
-              clearTimeout(timeoutId);
               if (response && response.status === "success") {
                 resolve(response);
               } else {
@@ -447,7 +439,6 @@ export default function Leave_Form({ setSubmitted }) {
               }
             })
             .withFailureHandler((error) => {
-              clearTimeout(timeoutId);
               reject(error.message || error);
             })
             .saveForm(submissionData);
@@ -470,7 +461,6 @@ export default function Leave_Form({ setSubmitted }) {
           });
         } catch (error) {
           console.error("Submission error:", error);
-          setSubmitting(false);
         } finally {
           setLoading(false);
         }
@@ -495,7 +485,7 @@ export default function Leave_Form({ setSubmitted }) {
       <div className="bg-white w-xl h-xl rounded-xl p-6 space-y-5">
         <div className="flex flex-row justify-between">
           <div className="text-black">
-            <p className="font-text md:text-base text-xs">Application for</p>
+            <p className="font-text md:text-base text-x">Application for</p>
             <h1 className="md:text-4xl text-xl">Leave Form</h1>
           </div>
           <div>
@@ -1535,17 +1525,6 @@ export default function Leave_Form({ setSubmitted }) {
                     id="authorizedPersonnel"
                     name="authorizedPersonnel"
                     type="text"
-<<<<<<< HEAD
-                    placeholder="Enter authorized personnel"
-                    onChange={(e) => {
-                    const onlyLetters = e.target.value.replace(
-                      /[^a-zA-Z\s.,\-]/g,
-                      "",
-                    );
-                    formik.setFieldValue("authorizedPersonnel", onlyLetters);
-                  }}
-                  value={formik.values.authorizedPersonnel}
-=======
                     placeholder="Last Name, First Name, Middle Name"
                     maxLength="50"
                     onChange={(e) => {
@@ -1556,7 +1535,7 @@ export default function Leave_Form({ setSubmitted }) {
                       formik.setFieldValue("authorizedPersonnel", onlyLetters);
                     }}
                     value={formik.values.authorizedPersonnel}
->>>>>>> 6a1c0789f0ea9489f116b00197756d777304fdf9
+
                   />
                   {formik.touched.authorizedPersonnel &&
                   formik.errors.authorizedPersonnel ? (
