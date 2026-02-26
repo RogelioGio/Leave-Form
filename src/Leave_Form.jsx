@@ -27,22 +27,45 @@ import Holidays from "date-holidays";
 
 export default function Leave_Form({ setSubmitted }) {
   const [hd, setHd] = useState(null);
+  const [approverList, setApproverList] = useState([]);
 
   useEffect(() => {
     const getHolidays = async () => {
-      const currentYear = new Date().getFullYear();
-      const res = await fetch(
-        `https://date.nager.at/api/v3/PublicHolidays/${currentYear}/PH`,
-      );
+      try {
+        const currentYear = new Date().getFullYear();
+        const res = await fetch(
+          `https://date.nager.at/api/v3/PublicHolidays/${currentYear}/PH`,
+        );
 
-      if (res.ok) {
+        if (res.ok) {
+          const data = await res.json();
+          console.log("Fetched holidays:", data);
+          setHd(data);
+        }
+      } catch (err) {
+        console.error("Holiday fetch error:", err);
+      }
+    };
+
+    const getApprovers = async () => {
+      try {
+        setIsLoadingApprovers(true); // Ensure it's true before starting
+        const res = await fetch(
+          "https://script.googleusercontent.com/a/macros/lra.gov.ph/echo?user_content_key=AY5xjrQQjgYCViq2BS3gTRgRIIFo1VKxoWTppU3GYxfuAjJujVoB7uH2dAUMM61-wI_9ZIogm7Cx6WwRVNj76ZMVjaKOSq5QridwGyZRf_Tr0vPxqLEbHtIHfy6P3Y3a3Hi2fF2nP1IXK32YrW8wsx3KcjGqV_VmkSh2Vq5WYkbGYE6g0fSLA-LQZxi-bKd5k2VJC6hnxs7xfs7t-ufZh1A1m40UmcuUgr-aXPBloMwOt2TpQX8lS02KNK9p8KqhCybcEgWmkchRui4OeOMw63ttViYVdDlaqvEQD9kmVIHd8nPkXLVf_aA&lib=MfF3hy7CyE_ucW8fCM9V3UyF36H-aO8pc",
+        );
         const data = await res.json();
-        console.log("Fetched holidays:", data);
-        setHd(data);
+        
+        const names = data.approvers.map((item) => item.Name);
+        setApproverList(names);
+      } catch (err) {
+        console.error("Fetch error:", err);
+      } finally {
+        setIsLoadingApprovers(false); // Stop loading regardless of success or error
       }
     };
 
     getHolidays();
+    getApprovers();
   }, []);
 
   const officeOptions = [
@@ -112,10 +135,10 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(0);
+  const [stage, setStage] = useState(2);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
-
+  const [isLoadingApprovers, setIsLoadingApprovers] = useState(true);
   const handleNext = async (formik) => {
     const errors = await formik.validateForm();
 
@@ -385,7 +408,7 @@ export default function Leave_Form({ setSubmitted }) {
     },
     validationSchema: validationSchema[stage],
     onSubmit: async (values) => {
-      `// 1. Calculate the list of dates based on selection type`
+      `// 1. Calculate the list of dates based on selection type`;
       let dateList = [];
 
       if (values.dateTypes === "single" && values.singleDate) {
@@ -1455,7 +1478,7 @@ export default function Leave_Form({ setSubmitted }) {
                           </PopoverTrigger>
                           <PopoverContent className={"p-0 w-fit"}>
                             <Calendar
-                              mode= "multiple"
+                              mode="multiple"
                               numberOfMonths={2}
                               defaultMonth={new Date()}
                               disabled={(currentDate) => {
@@ -1497,19 +1520,6 @@ export default function Leave_Form({ setSubmitted }) {
                     </div>
                   </>
                 )}
-              </div>
-              <div className="mt-5 space-y-4">
-                <div>
-                  <h1 className="text-lg font-medium text-gray-700">
-                    Authorized Personnel
-                  </h1>
-                  <p className="text-sm text-gray-500">
-                    Input the authorized personnel who will approve the leave
-                    application. This is usually the immediate supervisor or
-                    department head of the employee.
-                  </p>
-                </div>
-
                 <div>
                   <div className="flex justify-between gap-2">
                     <label
@@ -1520,26 +1530,55 @@ export default function Leave_Form({ setSubmitted }) {
                     </label>
                     <p className="text-sm text-gray-500">Required</p>
                   </div>
-                  <input
-                    className="border text-black border-gray-300 rounded-md p-2 w-full "
-                    id="authorizedPersonnel"
-                    name="authorizedPersonnel"
-                    type="text"
-                    placeholder="Last Name, First Name, Middle Name"
-                    maxLength="50"
-                    onChange={(e) => {
-                      const onlyLetters = e.target.value.replace(
-                        /[^a-zA-Z\s.,\-]/g,
-                        "",
-                      );
-                      formik.setFieldValue("authorizedPersonnel", onlyLetters);
-                    }}
-                    value={formik.values.authorizedPersonnel}
 
-                  />
+                  <div className="flex flex-row gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        asChild
+                        type="button"
+                        disabled={isLoadingApprovers}
+                      >
+                        <div
+                          className={`border border-gray-200 p-2 rounded-md w-full text-left hover:bg-gray-100 cursor-pointer flex justify-between items-center ${isLoadingApprovers ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          <span
+                            className={`${formik.values.authorizedPersonnel ? "text-black" : "text-gray-500"}`}
+                          >
+                            {isLoadingApprovers
+                              ? "Loading personnel..."
+                              : formik.values.authorizedPersonnel ||
+                                "Select Authorized Personnel"}
+                          </span>
+                          {isLoadingApprovers ? (
+                            <div className="animate-spin h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full" />
+                          ) : (
+                            <ChevronDown
+                              className={`${formik.values.authorizedPersonnel ? "text-black" : "text-gray-500"} h-4 w-4`}
+                            />
+                          )}
+                        </div>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width] max-h-60 overflow-y-auto">
+                        <DropdownMenuRadioGroup
+                          value={formik.values.authorizedPersonnel}
+                          onValueChange={(value) => {
+                            formik.setFieldValue("authorizedPersonnel", value);
+                          }}
+                        >
+                          {approverList.map((name, index) => (
+                            <DropdownMenuRadioItem key={index} value={name}>
+                              {name}
+                            </DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
                   {formik.touched.authorizedPersonnel &&
                   formik.errors.authorizedPersonnel ? (
-                    <p className="text-sm text-red-600">
+                    <p className="text-sm text-red-600 mt-1">
                       {formik.errors.authorizedPersonnel}
                     </p>
                   ) : null}
