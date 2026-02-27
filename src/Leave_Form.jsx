@@ -135,7 +135,7 @@ export default function Leave_Form({ setSubmitted }) {
     "company.com",
   ];
 
-  const [stage, setStage] = useState(2);
+  const [stage, setStage] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isLoadingApprovers, setIsLoadingApprovers] = useState(true);
