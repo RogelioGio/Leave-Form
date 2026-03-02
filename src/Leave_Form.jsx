@@ -49,18 +49,17 @@ export default function Leave_Form({ setSubmitted }) {
 
     const getApprovers = async () => {
       try {
-        setIsLoadingApprovers(true); // Ensure it's true before starting
+        setIsLoadingApprovers(true);
         const res = await fetch(
-          "https://script.googleusercontent.com/a/macros/lra.gov.ph/echo?user_content_key=AY5xjrQQjgYCViq2BS3gTRgRIIFo1VKxoWTppU3GYxfuAjJujVoB7uH2dAUMM61-wI_9ZIogm7Cx6WwRVNj76ZMVjaKOSq5QridwGyZRf_Tr0vPxqLEbHtIHfy6P3Y3a3Hi2fF2nP1IXK32YrW8wsx3KcjGqV_VmkSh2Vq5WYkbGYE6g0fSLA-LQZxi-bKd5k2VJC6hnxs7xfs7t-ufZh1A1m40UmcuUgr-aXPBloMwOt2TpQX8lS02KNK9p8KqhCybcEgWmkchRui4OeOMw63ttViYVdDlaqvEQD9kmVIHd8nPkXLVf_aA&lib=MfF3hy7CyE_ucW8fCM9V3UyF36H-aO8pc",
+          "https://script.google.com/macros/s/AKfycbxGgTtLLVXdkRhtu_ZOIof7iBvMKZsaSk7f1d6I2cxZqT-rcuIBQBKl3zvruRAI1zU/exec",
         );
         const data = await res.json();
-        
-        const names = data.approvers.map((item) => item.Name);
-        setApproverList(names);
+        // Store the whole array of objects
+        setApproverList(data.approvers);
       } catch (err) {
         console.error("Fetch error:", err);
       } finally {
-        setIsLoadingApprovers(false); // Stop loading regardless of success or error
+        setIsLoadingApprovers(false);
       }
     };
 
@@ -129,13 +128,14 @@ export default function Leave_Form({ setSubmitted }) {
   ];
 
   const allowedDomain = [
+    "lra.gov.ph",
     "gmail.com",
     "yahoo.com",
     "outlook.com",
     "company.com",
   ];
 
-  const [stage, setStage] = useState(2);
+  const [stage, setStage] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isLoadingApprovers, setIsLoadingApprovers] = useState(true);
@@ -405,6 +405,7 @@ export default function Leave_Form({ setSubmitted }) {
       endDate: null,
       dates: [], // stagger dates from now on
       authorizedPersonnel: "",
+      approverEmail: "",
     },
     validationSchema: validationSchema[stage],
     onSubmit: async (values) => {
@@ -1562,13 +1563,31 @@ export default function Leave_Form({ setSubmitted }) {
                       <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width] max-h-60 overflow-y-auto">
                         <DropdownMenuRadioGroup
                           value={formik.values.authorizedPersonnel}
-                          onValueChange={(value) => {
-                            formik.setFieldValue("authorizedPersonnel", value);
+                          onValueChange={(name) => {
+                            // 1. Update the UI name
+                            formik.setFieldValue("authorizedPersonnel", name);
+
+                            // 2. Find the object in your list to get the matching email
+                            const selected = approverList.find(
+                              (person) => person.Name === name,
+                            );
+
+                            // 3. Set the hidden email field for the API
+                            if (selected) {
+                              formik.setFieldValue(
+                                "approverEmail",
+                                selected.Email,
+                              );
+                            }
                           }}
                         >
-                          {approverList.map((name, index) => (
-                            <DropdownMenuRadioItem key={index} value={name}>
-                              {name}
+                          {/* Changed 'name' to 'person' because your list is now objects */}
+                          {approverList.map((person, index) => (
+                            <DropdownMenuRadioItem
+                              key={index}
+                              value={person.Name}
+                            >
+                              {person.Name}
                             </DropdownMenuRadioItem>
                           ))}
                         </DropdownMenuRadioGroup>
